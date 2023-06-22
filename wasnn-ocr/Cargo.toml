@@ -1,0 +1,14 @@
+[package]
+name = "wasnn-ocr"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wasnn-imageproc = { path = "../wasnn-imageproc" }
+wasnn-tensor = { path = "../wasnn-tensor" }
+
+[dev-dependencies]
+fastrand = "1.9.0"
+
+[lib]
+crate-type = ["lib"]
