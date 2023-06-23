@@ -8,7 +8,9 @@ use rayon::prelude::*;
 use wasnn::ctc::{CtcDecoder, CtcHypothesis};
 use wasnn::ops::{pad, resize, CoordTransformMode, NearestMode, ResizeMode, ResizeTarget};
 use wasnn::{Dimension, Model, RunOptions};
-use wasnn_imageproc::{draw_polygon, Point, Polygon, Rect, RotatedRect};
+use wasnn_imageproc::{
+    bounding_rect, draw_polygon, BoundingRect, Point, Polygon, Rect, RotatedRect,
+};
 use wasnn_ocr::page_layout::{find_connected_component_rects, find_text_lines, line_polygon};
 use wasnn_tensor::{tensor, Tensor, TensorLayout, TensorView};
 
@@ -127,31 +129,6 @@ fn round_up<
 ) -> T {
     let rem = val % factor;
     (val + factor) - rem
-}
-
-/// Calculate the bounding rect of `rects`.
-fn bounding_rect(rects: &[RotatedRect]) -> Option<Rect> {
-    if let Some((min_x, max_x, min_y, max_y)) =
-        rects
-            .iter()
-            .fold(None as Option<(i32, i32, i32, i32)>, |min_max, rect| {
-                let br = rect.bounding_rect();
-                min_max
-                    .map(|(min_x, max_x, min_y, max_y)| {
-                        (
-                            min_x.min(br.left()),
-                            max_x.max(br.right()),
-                            min_y.min(br.top()),
-                            max_y.max(br.bottom()),
-                        )
-                    })
-                    .or(Some((br.left(), br.right(), br.top(), br.bottom())))
-            })
-    {
-        Some(Rect::from_tlbr(min_y, min_x, max_y, max_x))
-    } else {
-        None
-    }
 }
 
 /// The value used to represent fully black pixels in normalized greyscale images.

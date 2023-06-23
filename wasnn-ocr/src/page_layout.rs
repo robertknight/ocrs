@@ -3,8 +3,8 @@ use std::collections::BinaryHeap;
 use std::iter::zip;
 
 use wasnn_imageproc::{
-    find_contours, min_area_rect, simplify_polygon, Line, Point, Rect, RetrievalMode, RotatedRect,
-    Vec2,
+    find_contours, min_area_rect, simplify_polygon, BoundingRect, Line, Point, Rect, RetrievalMode,
+    RotatedRect, Vec2,
 };
 use wasnn_tensor::NdTensorView;
 
@@ -527,7 +527,7 @@ pub fn line_polygon(words: &[RotatedRect]) -> Vec<Point> {
 
 #[cfg(test)]
 mod tests {
-    use wasnn_imageproc::{fill_rect, Point, Polygon, Rect, RotatedRect, Vec2};
+    use wasnn_imageproc::{fill_rect, BoundingRect, Point, Polygon, Rect, RotatedRect, Vec2};
     use wasnn_tensor::NdTensor;
 
     use super::max_empty_rects;
