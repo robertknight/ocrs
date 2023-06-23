@@ -1,0 +1,16 @@
+[package]
+name = "wasnn-ocr-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+image = { version = "0.24.6", default-features = false, features = ["png", "jpeg", "webp"] }
+png = "0.17.6"
+wasnn = { path = "../" }
+wasnn-imageproc = { path = "../wasnn-imageproc" }
+wasnn-tensor = { path = "../wasnn-tensor" }
+wasnn-ocr = { path = "../wasnn-ocr" }
+
+[[bin]]
+name = "wasnn-ocr"
+path = "src/main.rs"
