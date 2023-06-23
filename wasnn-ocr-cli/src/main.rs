@@ -340,8 +340,18 @@ fn recognize_text_lines(
         line_groups.entry(group_width).or_default().push(line_index);
     }
 
-    // TODO - Split large line groups up to better exploit parallelism in the
-    // loop below.
+    // Split large line groups up to better exploit parallelism in the loop
+    // below.
+    let max_lines_per_group = 20;
+    let line_groups: Vec<(i32, Vec<usize>)> = line_groups
+        .into_iter()
+        .flat_map(|(group_width, line_indices)| {
+            line_indices
+                .chunks(max_lines_per_group)
+                .map(move |chunk| (group_width, chunk.to_vec()))
+                .collect::<Vec<_>>()
+        })
+        .collect();
 
     // Run text recognition on batches of lines. Produces a map of line index
     // to recognition result.
