@@ -5,9 +5,8 @@ use std::io::BufWriter;
 
 use wasnn::ctc::{CtcDecoder, CtcHypothesis};
 use wasnn::ops::{pad, resize, CoordTransformMode, NearestMode, ResizeMode, ResizeTarget};
-use wasnn::Timer;
 use wasnn::{Dimension, Model, RunOptions};
-use wasnn_imageproc::{draw_polygon, Point, Polygon, Rect, RotatedRect};
+use wasnn_imageproc::{Point, Polygon, Rect, RotatedRect};
 use wasnn_ocr::page_layout::{find_connected_component_rects, find_text_lines, line_polygon};
 use wasnn_tensor::{tensor, Tensor, TensorLayout, TensorView};
 
@@ -272,65 +271,32 @@ fn detect_words(
     Ok(word_rects)
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let mut debug = false;
-    let args: Vec<_> = std::env::args()
-        .filter(|cmd| match cmd.as_ref() {
-            "--debug" => {
-                debug = true;
-                false
-            }
-            _ => true,
-        })
-        .collect();
-
-    if args.len() <= 1 {
-        println!(
-            "Usage: {} <detection_model> <rec_model> <image>",
-            args.get(0).map(|s| s.as_str()).unwrap_or("")
-        );
-        // Exit with non-zero status, but also don't show an error.
-        std::process::exit(1);
-    }
-
-    let detection_model_name = args.get(1).ok_or("detection model name not specified")?;
-    let recognition_model_name = args.get(2).ok_or("recognition model name not specified")?;
-    let image_path = args.get(3).ok_or("image path not specified")?;
-
-    let detection_model_bytes = fs::read(detection_model_name)?;
-    let detection_model = Model::load(&detection_model_bytes)?;
-
-    let recognition_model_bytes = fs::read(recognition_model_name)?;
-    let recognition_model = Model::load(&recognition_model_bytes)?;
-
-    // Read image into CHW tensor.
-    let mut color_img = read_image(image_path).expect("failed to read input image");
-
-    let normalize_pixel = |pixel| pixel + ZERO_VALUE;
-
-    // Convert color CHW tensor to fixed-size greyscale NCHW input expected by model.
-    let grey_img = greyscale_image(color_img.view(), normalize_pixel);
-
-    let word_rects = detect_words(grey_img.view(), &detection_model, debug)?;
-
-    // Perform layout analysis to group words into lines, in reading order.
-    let [_, img_height, img_width] = grey_img.dims();
-    let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
-    let line_rects = find_text_lines(&word_rects, page_rect);
-
-    let mut timer = Timer::new();
-    timer.start();
-
-    let rec_input_id = recognition_model
+/// Recognize text lines in an image.
+///
+/// `image` is a CHW greyscale image. `lines` is a list of detected text lines,
+/// where each line is a sequence of text word rects. `model` is a recognition
+/// model which accepts an NCHW tensor of text line images and outputs a
+/// `[sequence, batch, label]` tensor of log probabilities of character classes,
+/// which must be converted to a character sequence using CTC decoding.
+///
+/// The result is the recognized text for each line.
+fn recognize_text_lines(
+    image: TensorView<f32>,
+    lines: &[Vec<RotatedRect>],
+    page_rect: Rect,
+    model: &Model,
+    debug: bool,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    let rec_input_id = model
         .input_ids()
         .first()
         .copied()
         .expect("recognition model has no inputs");
-    let rec_input_shape = recognition_model
+    let rec_input_shape = model
         .node_info(rec_input_id)
         .and_then(|info| info.shape())
         .ok_or("recognition model does not specify input shape")?;
-    let rec_output_id = recognition_model
+    let rec_output_id = model
         .output_ids()
         .first()
         .copied()
@@ -364,7 +330,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // There is a trade-off between maximizing the batch size and minimizing
     // the variance in width of images in the batch.
     let mut line_groups: HashMap<i32, Vec<usize>> = HashMap::new();
-    for (line_index, word_rects) in line_rects.iter().enumerate() {
+    for (line_index, word_rects) in lines.iter().enumerate() {
         let line_rect = bounding_rect(word_rects).expect("line has no words");
         let resized_width = resized_line_width(line_rect.width(), line_rect.height());
         let group_width = round_up(resized_width, 50);
@@ -389,13 +355,15 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             // Extract and resize line images
             for (group_line_index, line_index) in line_indices.iter().copied().enumerate() {
-                let word_rects = &line_rects[line_index];
+                let word_rects = &lines[line_index];
                 let line_poly = Polygon::new(line_polygon(word_rects));
-                let grey_chan = grey_img.nd_slice([0]);
+                let grey_chan = image.nd_slice([0]);
 
-                draw_polygon(color_img.nd_slice_mut([0]), line_poly.vertices(), 0.9); // Red
-                draw_polygon(color_img.nd_slice_mut([1]), line_poly.vertices(), 0.); // Green
-                draw_polygon(color_img.nd_slice_mut([2]), line_poly.vertices(), 0.); // Blue
+                // TODO - Re-implement text line detection debugging.
+                //
+                // draw_polygon(color_img.nd_slice_mut([0]), line_poly.vertices(), 0.9); // Red
+                // draw_polygon(color_img.nd_slice_mut([1]), line_poly.vertices(), 0.); // Green
+                // draw_polygon(color_img.nd_slice_mut([2]), line_poly.vertices(), 0.); // Blue
 
                 // Extract line image
                 let line_rect = line_poly.bounding_rect();
@@ -442,7 +410,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
 
             // Perform text recognition on the line batch.
-            let rec_output = recognition_model
+            let rec_output = model
                 .run(
                     &[(rec_input_id, (&line_rec_input).into())],
                     &[rec_output_id],
@@ -469,20 +437,74 @@ fn main() -> Result<(), Box<dyn Error>> {
         })
         .collect();
 
-    timer.end();
+    let line_texts = (0..lines.len())
+        .filter_map(|idx| line_rec_results.get(&idx))
+        .map(|result| result.to_string(DEFAULT_ALPHABET))
+        .collect();
 
-    for decode_result in (0..line_rects.len()).filter_map(|idx| line_rec_results.get(&idx)) {
-        println!("{}", decode_result.to_string(DEFAULT_ALPHABET));
+    Ok(line_texts)
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let mut debug = false;
+    let args: Vec<_> = std::env::args()
+        .filter(|cmd| match cmd.as_ref() {
+            "--debug" => {
+                debug = true;
+                false
+            }
+            _ => true,
+        })
+        .collect();
+
+    if args.len() <= 1 {
+        println!(
+            "Usage: {} <detection_model> <rec_model> <image>",
+            args.get(0).map(|s| s.as_str()).unwrap_or("")
+        );
+        // Exit with non-zero status, but also don't show an error.
+        std::process::exit(1);
+    }
+
+    let detection_model_name = args.get(1).ok_or("detection model name not specified")?;
+    let recognition_model_name = args.get(2).ok_or("recognition model name not specified")?;
+    let image_path = args.get(3).ok_or("image path not specified")?;
+
+    let detection_model_bytes = fs::read(detection_model_name)?;
+    let detection_model = Model::load(&detection_model_bytes)?;
+
+    let recognition_model_bytes = fs::read(recognition_model_name)?;
+    let recognition_model = Model::load(&recognition_model_bytes)?;
+
+    // Read image into CHW tensor.
+    let color_img = read_image(image_path).expect("failed to read input image");
+
+    let normalize_pixel = |pixel| pixel + ZERO_VALUE;
+
+    // Convert color CHW tensor to fixed-size greyscale NCHW input expected by model.
+    let grey_img = greyscale_image(color_img.view(), normalize_pixel);
+
+    // Find text components (words) in the input image.
+    let word_rects = detect_words(grey_img.view(), &detection_model, debug)?;
+
+    // Perform layout analysis to group words into lines, in reading order.
+    let [_, img_height, img_width] = grey_img.dims();
+    let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
+    let line_rects = find_text_lines(&word_rects, page_rect);
+
+    // Perform recognition on the detected text lines.
+    let line_texts = recognize_text_lines(
+        grey_img.view(),
+        &line_rects,
+        page_rect,
+        &recognition_model,
+        debug,
+    )?;
+    for line in line_texts {
+        println!("{}", line);
     }
 
     if debug {
-        let recognition_time = timer.elapsed();
-        println!(
-            "Line recognition time {} time per line {}",
-            recognition_time,
-            recognition_time / line_rects.len() as f32
-        );
-
         println!(
             "Found {} words, {} lines in image of size {}x{}",
             word_rects.len(),
