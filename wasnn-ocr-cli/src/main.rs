@@ -6,7 +6,7 @@ use std::io::BufWriter;
 use wasnn::ctc::{CtcDecoder, CtcHypothesis};
 use wasnn::ops::{pad, resize, CoordTransformMode, NearestMode, ResizeMode, ResizeTarget};
 use wasnn::{Dimension, Model, RunOptions};
-use wasnn_imageproc::{Point, Polygon, Rect, RotatedRect};
+use wasnn_imageproc::{draw_polygon, Point, Polygon, Rect, RotatedRect};
 use wasnn_ocr::page_layout::{find_connected_component_rects, find_text_lines, line_polygon};
 use wasnn_tensor::{tensor, Tensor, TensorLayout, TensorView};
 
@@ -360,12 +360,6 @@ fn recognize_text_lines(
                 let line_poly = Polygon::new(line_polygon(word_rects));
                 let grey_chan = image.nd_slice([0]);
 
-                // TODO - Re-implement text line detection debugging.
-                //
-                // draw_polygon(color_img.nd_slice_mut([0]), line_poly.vertices(), 0.9); // Red
-                // draw_polygon(color_img.nd_slice_mut([1]), line_poly.vertices(), 0.); // Green
-                // draw_polygon(color_img.nd_slice_mut([2]), line_poly.vertices(), 0.); // Blue
-
                 // Extract line image
                 let line_rect = line_poly.bounding_rect();
                 let mut out_img = Tensor::zeros(&[
@@ -514,8 +508,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             img_height
         );
 
+        let mut annotated_img = color_img;
+
+        for line in line_rects {
+            let line_poly = Polygon::new(line_polygon(&line));
+            draw_polygon(annotated_img.nd_slice_mut([0]), line_poly.vertices(), 0.9); // Red
+            draw_polygon(annotated_img.nd_slice_mut([1]), line_poly.vertices(), 0.); // Green
+            draw_polygon(annotated_img.nd_slice_mut([2]), line_poly.vertices(), 0.);
+            // Blue
+        }
+
         // Write out the annotated input image.
-        write_image("ocr-detection-output.png", color_img.view())?;
+        write_image("ocr-detection-output.png", annotated_img.view())?;
     }
 
     Ok(())
