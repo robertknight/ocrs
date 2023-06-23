@@ -182,7 +182,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let input_id = detection_model
         .input_ids()
-        .get(0)
+        .first()
         .copied()
         .expect("model has no inputs");
     let input_shape = detection_model
@@ -191,7 +191,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .ok_or("model does not specify expected input shape")?;
     let output_id = detection_model
         .output_ids()
-        .get(0)
+        .first()
         .copied()
         .expect("model has no outputs");
 
@@ -200,7 +200,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let rec_input_id = recognition_model
         .input_ids()
-        .get(0)
+        .first()
         .copied()
         .expect("recognition model has no inputs");
     let rec_input_shape = recognition_model
@@ -209,7 +209,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .ok_or("recognition model does not specify input shape")?;
     let rec_output_id = recognition_model
         .output_ids()
-        .get(0)
+        .first()
         .copied()
         .ok_or("recognition model has no outputs")?;
 
@@ -324,10 +324,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         let min_width = 10.;
         let max_width = 800.;
         let aspect_ratio = orig_width as f32 / orig_height as f32;
-        let line_img_width = (rec_img_height as f32 * aspect_ratio)
+        (rec_img_height as f32 * aspect_ratio)
             .max(min_width)
-            .min(max_width) as i32;
-        line_img_width
+            .min(max_width) as i32
     };
 
     // Group lines into batches which will have similar widths after resizing
@@ -341,7 +340,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // the variance in width of images in the batch.
     let mut line_groups: HashMap<i32, Vec<usize>> = HashMap::new();
     for (line_index, word_rects) in line_rects.iter().enumerate() {
-        let (width, height) = calc_line_width_height(&word_rects);
+        let (width, height) = calc_line_width_height(word_rects);
         let resized_width = resized_line_width(width, height);
         let group_width = round_up(resized_width, 50);
         line_groups.entry(group_width).or_default().push(line_index);
