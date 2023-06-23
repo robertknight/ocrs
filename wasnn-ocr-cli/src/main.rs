@@ -153,78 +153,41 @@ fn bounding_rect(rects: &[RotatedRect]) -> Option<Rect> {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let mut debug = false;
-    let args: Vec<_> = std::env::args()
-        .filter(|cmd| match cmd.as_ref() {
-            "--debug" => {
-                debug = true;
-                false
-            }
-            _ => true,
-        })
-        .collect();
+/// The value used to represent fully black pixels in normalized greyscale images.
+const ZERO_VALUE: f32 = -0.5;
 
-    if args.len() <= 1 {
-        println!(
-            "Usage: {} <detection_model> <rec_model> <image>",
-            args.get(0).map(|s| s.as_str()).unwrap_or("")
-        );
-        // Exit with non-zero status, but also don't show an error.
-        std::process::exit(1);
-    }
-
-    let detection_model_name = args.get(1).ok_or("detection model name not specified")?;
-    let recognition_model_name = args.get(2).ok_or("recognition model name not specified")?;
-    let image_path = args.get(3).ok_or("image path not specified")?;
-
-    let detection_model_bytes = fs::read(detection_model_name)?;
-    let detection_model = Model::load(&detection_model_bytes)?;
-
-    let input_id = detection_model
+/// Detect text words in a greyscale image.
+///
+/// `image` is a greyscale CHW image with values in the range 0 to 1. `model` is
+/// a model which takes an NCHW input tensor and returns a binary segmentation
+/// mask predicting whether each pixel is part of a text word or not. The image
+/// is padded and resized to the model's expected input size before performing
+/// detection.
+///
+/// The result is an unsorted list of the oriented bounding rectangels of
+/// connected components (ie. text words) in the mask.
+fn detect_words(
+    mut image: TensorView<f32>,
+    model: &Model,
+    debug: bool,
+) -> Result<Vec<RotatedRect>, Box<dyn Error>> {
+    let input_id = model
         .input_ids()
         .first()
         .copied()
         .expect("model has no inputs");
-    let input_shape = detection_model
+    let input_shape = model
         .node_info(input_id)
         .and_then(|info| info.shape())
         .ok_or("model does not specify expected input shape")?;
-    let output_id = detection_model
+    let output_id = model
         .output_ids()
         .first()
         .copied()
         .expect("model has no outputs");
 
-    let recognition_model_bytes = fs::read(recognition_model_name)?;
-    let recognition_model = Model::load(&recognition_model_bytes)?;
-
-    let rec_input_id = recognition_model
-        .input_ids()
-        .first()
-        .copied()
-        .expect("recognition model has no inputs");
-    let rec_input_shape = recognition_model
-        .node_info(rec_input_id)
-        .and_then(|info| info.shape())
-        .ok_or("recognition model does not specify input shape")?;
-    let rec_output_id = recognition_model
-        .output_ids()
-        .first()
-        .copied()
-        .ok_or("recognition model has no outputs")?;
-
-    // Read image into CHW tensor.
-    let mut color_img = read_image(image_path).expect("failed to read input image");
-
-    // The value used for black after normalization.
-    let zero_value = -0.5;
-    let normalize_pixel = |pixel| pixel + zero_value;
-
-    // Convert color CHW tensor to fixed-size greyscale NCHW input expected by model.
-    let mut grey_img = greyscale_image(color_img.view(), normalize_pixel);
-    let [_, img_height, img_width] = grey_img.dims();
-    grey_img.insert_dim(0); // Add batch dimension
+    let [_, img_height, img_width] = image.dims();
+    image.insert_dim(0); // Add batch dimension
 
     let bilinear_resize = |img: TensorView, height, width| {
         resize(
@@ -256,12 +219,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let pad_right = (in_width as i32 - img_width as i32).max(0);
     let grey_img = if pad_bottom > 0 || pad_right > 0 {
         pad(
-            grey_img.view(),
+            image.view(),
             &tensor!([0, 0, 0, 0, 0, 0, pad_bottom, pad_right]),
-            zero_value,
+            ZERO_VALUE,
         )?
     } else {
-        grey_img
+        image.to_tensor()
     };
 
     // Resize images to the text detection model's input size.
@@ -269,7 +232,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Run text detection model to compute a probability mask indicating whether
     // each pixel is part of a text word or not.
-    let outputs = detection_model.run(
+    let outputs = model.run(
         &[(input_id, (&resized_grey_img).into())],
         &[output_id],
         if debug {
@@ -304,13 +267,74 @@ fn main() -> Result<(), Box<dyn Error>> {
     // objects.
     let expand_dist = 3.;
 
-    // Perform layout analysis to group words into lines, in reading order.
     let word_rects = find_connected_component_rects(binary_mask.nd_slice([0, 0]), expand_dist);
+
+    Ok(word_rects)
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let mut debug = false;
+    let args: Vec<_> = std::env::args()
+        .filter(|cmd| match cmd.as_ref() {
+            "--debug" => {
+                debug = true;
+                false
+            }
+            _ => true,
+        })
+        .collect();
+
+    if args.len() <= 1 {
+        println!(
+            "Usage: {} <detection_model> <rec_model> <image>",
+            args.get(0).map(|s| s.as_str()).unwrap_or("")
+        );
+        // Exit with non-zero status, but also don't show an error.
+        std::process::exit(1);
+    }
+
+    let detection_model_name = args.get(1).ok_or("detection model name not specified")?;
+    let recognition_model_name = args.get(2).ok_or("recognition model name not specified")?;
+    let image_path = args.get(3).ok_or("image path not specified")?;
+
+    let detection_model_bytes = fs::read(detection_model_name)?;
+    let detection_model = Model::load(&detection_model_bytes)?;
+
+    let recognition_model_bytes = fs::read(recognition_model_name)?;
+    let recognition_model = Model::load(&recognition_model_bytes)?;
+
+    // Read image into CHW tensor.
+    let mut color_img = read_image(image_path).expect("failed to read input image");
+
+    let normalize_pixel = |pixel| pixel + ZERO_VALUE;
+
+    // Convert color CHW tensor to fixed-size greyscale NCHW input expected by model.
+    let grey_img = greyscale_image(color_img.view(), normalize_pixel);
+
+    let word_rects = detect_words(grey_img.view(), &detection_model, debug)?;
+
+    // Perform layout analysis to group words into lines, in reading order.
+    let [_, img_height, img_width] = grey_img.dims();
     let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
     let line_rects = find_text_lines(&word_rects, page_rect);
 
     let mut timer = Timer::new();
     timer.start();
+
+    let rec_input_id = recognition_model
+        .input_ids()
+        .first()
+        .copied()
+        .expect("recognition model has no inputs");
+    let rec_input_shape = recognition_model
+        .node_info(rec_input_id)
+        .and_then(|info| info.shape())
+        .ok_or("recognition model does not specify input shape")?;
+    let rec_output_id = recognition_model
+        .output_ids()
+        .first()
+        .copied()
+        .ok_or("recognition model has no outputs")?;
 
     let rec_img_height = match rec_input_shape[2] {
         Dimension::Fixed(size) => size,
@@ -367,7 +391,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             for (group_line_index, line_index) in line_indices.iter().copied().enumerate() {
                 let word_rects = &line_rects[line_index];
                 let line_poly = Polygon::new(line_polygon(word_rects));
-                let grey_chan = grey_img.nd_slice([0, 0]);
+                let grey_chan = grey_img.nd_slice([0]);
 
                 draw_polygon(color_img.nd_slice_mut([0]), line_poly.vertices(), 0.9); // Red
                 draw_polygon(color_img.nd_slice_mut([1]), line_poly.vertices(), 0.); // Green
