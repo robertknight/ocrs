@@ -3,6 +3,8 @@ use std::error::Error;
 use std::fs;
 use std::io::BufWriter;
 
+use rayon::prelude::*;
+
 use wasnn::ctc::{CtcDecoder, CtcHypothesis};
 use wasnn::ops::{pad, resize, CoordTransformMode, NearestMode, ResizeMode, ResizeTarget};
 use wasnn::{Dimension, Model, RunOptions};
@@ -338,10 +340,13 @@ fn recognize_text_lines(
         line_groups.entry(group_width).or_default().push(line_index);
     }
 
+    // TODO - Split large line groups up to better exploit parallelism in the
+    // loop below.
+
     // Run text recognition on batches of lines. Produces a map of line index
     // to recognition result.
     let line_rec_results: HashMap<usize, CtcHypothesis> = line_groups
-        .iter()
+        .par_iter()
         .flat_map(|(group_width, line_indices)| {
             if debug {
                 println!(
@@ -429,6 +434,7 @@ fn recognize_text_lines(
                     let decode_result = decoder.decode_greedy(input_seq.clone());
                     (line_index, decode_result)
                 })
+                .collect::<Vec<_>>()
         })
         .collect();
 
