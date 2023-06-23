@@ -127,7 +127,7 @@ fn round_up<
     (val + factor) - rem
 }
 
-/// Calculate the bounding rect of `word_rects`.
+/// Calculate the bounding rect of `rects`.
 fn bounding_rect(rects: &[RotatedRect]) -> Option<Rect> {
     if let Some((min_x, max_x, min_y, max_y)) =
         rects
@@ -157,13 +157,13 @@ const ZERO_VALUE: f32 = -0.5;
 
 /// Detect text words in a greyscale image.
 ///
-/// `image` is a greyscale CHW image with values in the range 0 to 1. `model` is
-/// a model which takes an NCHW input tensor and returns a binary segmentation
-/// mask predicting whether each pixel is part of a text word or not. The image
-/// is padded and resized to the model's expected input size before performing
-/// detection.
+/// `image` is a greyscale CHW image with values in the range `ZERO_VALUE` to
+/// `ZERO_VALUE + 1`. `model` is a model which takes an NCHW input tensor and
+/// returns a binary segmentation mask predicting whether each pixel is part of
+/// a text word or not. The image is padded and resized to the model's expected
+/// input size before performing detection.
 ///
-/// The result is an unsorted list of the oriented bounding rectangels of
+/// The result is an unsorted list of the oriented bounding rectangles of
 /// connected components (ie. text words) in the mask.
 fn detect_words(
     mut image: TensorView<f32>,
@@ -273,13 +273,14 @@ fn detect_words(
 
 /// Recognize text lines in an image.
 ///
-/// `image` is a CHW greyscale image. `lines` is a list of detected text lines,
-/// where each line is a sequence of text word rects. `model` is a recognition
-/// model which accepts an NCHW tensor of text line images and outputs a
-/// `[sequence, batch, label]` tensor of log probabilities of character classes,
-/// which must be converted to a character sequence using CTC decoding.
+/// `image` is a CHW greyscale image with values in the range `ZERO_VALUE` to
+/// `ZERO_VALUE + 1`. `lines` is a list of detected text lines, where each line
+/// is a sequence of word rects. `model` is a recognition model which accepts an
+/// NCHW tensor of greyscale line images and outputs a `[sequence, batch, label]`
+/// tensor of log probabilities of character classes, which must be converted to
+/// a character sequence using CTC decoding.
 ///
-/// The result is the recognized text for each line.
+/// The result is a list containing the recognized text for each input line.
 fn recognize_text_lines(
     image: TensorView<f32>,
     lines: &[Vec<RotatedRect>],
