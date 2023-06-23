@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+rayon = "1.7.0"
+wasnn = { path = "../" }
 wasnn-imageproc = { path = "../wasnn-imageproc" }
 wasnn-tensor = { path = "../wasnn-tensor" }
 
