@@ -128,12 +128,13 @@ fn round_up<
     (val + factor) - rem
 }
 
-fn calc_line_width_height(word_rects: &[RotatedRect]) -> (i32, i32) {
+/// Calculate the bounding rect of `word_rects`.
+fn bounding_rect(rects: &[RotatedRect]) -> Option<Rect> {
     if let Some((min_x, max_x, min_y, max_y)) =
-        word_rects
+        rects
             .iter()
-            .fold(None as Option<(i32, i32, i32, i32)>, |min_max, wr| {
-                let br = wr.bounding_rect();
+            .fold(None as Option<(i32, i32, i32, i32)>, |min_max, rect| {
+                let br = rect.bounding_rect();
                 min_max
                     .map(|(min_x, max_x, min_y, max_y)| {
                         (
@@ -146,9 +147,9 @@ fn calc_line_width_height(word_rects: &[RotatedRect]) -> (i32, i32) {
                     .or(Some((br.left(), br.right(), br.top(), br.bottom())))
             })
     {
-        (max_x - min_x, max_y - min_y)
+        Some(Rect::from_tlbr(min_y, min_x, max_y, max_x))
     } else {
-        (0, 0)
+        None
     }
 }
 
@@ -340,8 +341,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // the variance in width of images in the batch.
     let mut line_groups: HashMap<i32, Vec<usize>> = HashMap::new();
     for (line_index, word_rects) in line_rects.iter().enumerate() {
-        let (width, height) = calc_line_width_height(word_rects);
-        let resized_width = resized_line_width(width, height);
+        let line_rect = bounding_rect(word_rects).expect("line has no words");
+        let resized_width = resized_line_width(line_rect.width(), line_rect.height());
         let group_width = round_up(resized_width, 50);
         line_groups.entry(group_width).or_default().push(line_index);
     }
