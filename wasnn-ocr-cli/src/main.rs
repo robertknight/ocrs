@@ -4,9 +4,9 @@ use std::fs;
 use std::io::BufWriter;
 
 use wasnn::Model;
-use wasnn_imageproc::{draw_polygon, Polygon, Rect};
-use wasnn_ocr::page_layout::{find_text_lines, line_polygon};
-use wasnn_ocr::{detect_words, prepare_image, recognize_text_lines};
+use wasnn_imageproc::{draw_polygon, Polygon};
+use wasnn_ocr::page_layout::line_polygon;
+use wasnn_ocr::{OcrEngine, OcrEngineParams};
 use wasnn_tensor::{Tensor, TensorLayout, TensorView};
 
 /// Read an image from `path` into a CHW tensor.
@@ -144,25 +144,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let color_img =
         read_image(&args.image).file_error_context("Failed to read image", &args.image)?;
 
-    // Convert color CHW tensor to fixed-size greyscale NCHW input expected by model.
-    let grey_img = prepare_image(color_img.view());
+    let engine = OcrEngine::new(OcrEngineParams {
+        detection_model: Some(detection_model),
+        recognition_model: Some(recognition_model),
+        debug: args.debug,
+    });
 
-    // Find text components (words) in the input image.
-    let word_rects = detect_words(grey_img.view(), &detection_model, args.debug)?;
-
-    // Perform layout analysis to group words into lines, in reading order.
-    let [_, img_height, img_width] = grey_img.dims();
-    let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
-    let line_rects = find_text_lines(&word_rects, page_rect);
-
-    // Perform recognition on the detected text lines.
-    let line_texts = recognize_text_lines(
-        grey_img.view(),
-        &line_rects,
-        page_rect,
-        &recognition_model,
-        args.debug,
-    )?;
+    let ocr_input = engine.prepare_input(color_img.view())?;
+    let word_rects = engine.detect_words(&ocr_input)?;
+    let line_rects = engine.find_text_lines(&ocr_input, &word_rects);
+    let line_texts = engine.recognize_text(&ocr_input, &line_rects)?;
     for line in line_texts {
         println!("{}", line);
     }
@@ -172,8 +163,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             "Found {} words, {} lines in image of size {}x{}",
             word_rects.len(),
             line_rects.len(),
-            img_width,
-            img_height
+            color_img.shape()[2],
+            color_img.shape()[1],
         );
 
         let mut annotated_img = color_img;

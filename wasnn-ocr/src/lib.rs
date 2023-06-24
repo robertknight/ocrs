@@ -11,7 +11,7 @@ use wasnn_tensor::{tensor, Tensor, TensorLayout, TensorView};
 
 pub mod page_layout;
 
-use page_layout::{find_connected_component_rects, line_polygon};
+use page_layout::{find_connected_component_rects, find_text_lines, line_polygon};
 
 /// Return the smallest multiple of `factor` that is >= `val`.
 fn round_up<
@@ -80,7 +80,7 @@ fn greyscale_image<F: Fn(f32) -> f32>(img: TensorView<f32>, normalize_pixel: F) 
 ///
 /// This converts an input CHW image with values in the range 0-1 to a greyscale
 /// image with values in the range `ZERO_VALUE` to `ZERO_VALUE + 1`.
-pub fn prepare_image(image: TensorView<f32>) -> Tensor<f32> {
+fn prepare_image(image: TensorView<f32>) -> Tensor<f32> {
     greyscale_image(image, |pixel| pixel + ZERO_VALUE)
 }
 
@@ -94,7 +94,7 @@ pub fn prepare_image(image: TensorView<f32>) -> Tensor<f32> {
 ///
 /// The result is an unsorted list of the oriented bounding rectangles of
 /// connected components (ie. text words) in the mask.
-pub fn detect_words(
+fn detect_words(
     mut image: TensorView<f32>,
     model: &Model,
     debug: bool,
@@ -210,13 +210,14 @@ pub fn detect_words(
 /// a character sequence using CTC decoding.
 ///
 /// The result is a list containing the recognized text for each input line.
-pub fn recognize_text_lines(
+fn recognize_text_lines(
     image: TensorView<f32>,
     lines: &[Vec<RotatedRect>],
-    page_rect: Rect,
     model: &Model,
     debug: bool,
 ) -> Result<Vec<String>, Box<dyn Error>> {
+    let [_, img_height, img_width] = image.dims();
+    let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
     let rec_input_id = model
         .input_ids()
         .first()
@@ -381,4 +382,101 @@ pub fn recognize_text_lines(
         .collect();
 
     Ok(line_texts)
+}
+
+/// Configuration for an [OcrEngine] instance.
+#[derive(Default)]
+pub struct OcrEngineParams {
+    /// Model used to detect text words in the image.
+    pub detection_model: Option<Model>,
+
+    /// Model used to recognize lines of text in the image.
+    pub recognition_model: Option<Model>,
+
+    /// Enable debug logging.
+    pub debug: bool,
+}
+
+/// Detects and recognizes text in images.
+///
+/// OcrEngine uses machine learning models to detect text, analyze layout
+/// and recognize text in an image.
+pub struct OcrEngine {
+    params: OcrEngineParams,
+}
+
+/// Input image for OCR analysis. Instances are created using
+/// [OcrEngine::prepare_input]
+pub struct OcrInput {
+    image: Tensor<f32>,
+}
+
+impl OcrEngine {
+    /// Construct a new engine from a given configuration.
+    pub fn new(params: OcrEngineParams) -> OcrEngine {
+        OcrEngine { params }
+    }
+
+    /// Preprocess an image for use with other methods of the engine.
+    pub fn prepare_input(&self, image: TensorView<f32>) -> Result<OcrInput, Box<dyn Error>> {
+        Ok(OcrInput {
+            image: prepare_image(image),
+        })
+    }
+
+    /// Detect text words in an image.
+    ///
+    /// Returns an unordered list of the oriented bounding rectangles of each
+    /// word found.
+    pub fn detect_words(&self, input: &OcrInput) -> Result<Vec<RotatedRect>, Box<dyn Error>> {
+        let Some(detection_model) = self.params.detection_model.as_ref() else {
+            return Err("Detection model not loaded".into());
+        };
+        detect_words(input.image.view(), detection_model, self.params.debug)
+    }
+
+    /// Perform layout analysis to group words into lines and sort them in
+    /// reading order.
+    ///
+    /// `words` is an unordered list of text word rectangles found by
+    /// [OcrEngine::detect_words]. The result is a list of lines, in reading
+    /// order. Each line is a sequence of word bounding rectangles, in reading
+    /// order.
+    pub fn find_text_lines(
+        &self,
+        input: &OcrInput,
+        words: &[RotatedRect],
+    ) -> Vec<Vec<RotatedRect>> {
+        let [_, img_height, img_width] = input.image.dims();
+        let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
+        find_text_lines(words, page_rect)
+    }
+
+    /// Recognize lines of text in an image.
+    ///
+    /// `lines` is an ordered list of the text line boxes in an image,
+    /// produced by [OcrEngine::find_text_lines].
+    pub fn recognize_text(
+        &self,
+        input: &OcrInput,
+        lines: &[Vec<RotatedRect>],
+    ) -> Result<Vec<String>, Box<dyn Error>> {
+        let Some(recognition_model) = self.params.recognition_model.as_ref() else {
+            return Err("Recognition model not loaded".into());
+        };
+        recognize_text_lines(
+            input.image.view(),
+            lines,
+            recognition_model,
+            self.params.debug,
+        )
+    }
+
+    /// Convenience API that extracts all text from an image as a single string.
+    pub fn get_text(&self, input: &OcrInput) -> Result<String, Box<dyn Error>> {
+        let word_rects = self.detect_words(input)?;
+        let line_rects = self.find_text_lines(input, &word_rects);
+        let line_texts = self.recognize_text(input, &line_rects)?;
+        Ok(line_texts.join("\n"))
+    }
 }
