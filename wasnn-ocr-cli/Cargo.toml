@@ -10,6 +10,7 @@ wasnn = { path = "../" }
 wasnn-imageproc = { path = "../wasnn-imageproc" }
 wasnn-tensor = { path = "../wasnn-tensor" }
 wasnn-ocr = { path = "../wasnn-ocr" }
+lexopt = "0.3.0"
 
 [[bin]]
 name = "wasnn-ocr"

@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::error::Error;
 use std::fs;
 use std::io::BufWriter;
@@ -66,45 +67,88 @@ fn image_from_tensor(tensor: TensorView<f32>) -> Vec<u8> {
         .collect()
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let mut debug = false;
-    let args: Vec<_> = std::env::args()
-        .filter(|cmd| match cmd.as_ref() {
-            "--debug" => {
-                debug = true;
-                false
-            }
-            _ => true,
-        })
-        .collect();
+struct Args {
+    detection_model: String,
+    recognition_model: String,
+    image: String,
+    debug: bool,
+}
 
-    if args.len() <= 1 {
-        println!(
-            "Usage: {} <detection_model> <rec_model> <image>",
-            args.get(0).map(|s| s.as_str()).unwrap_or("")
-        );
-        // Exit with non-zero status, but also don't show an error.
-        std::process::exit(1);
+fn parse_args() -> Result<Args, lexopt::Error> {
+    use lexopt::prelude::*;
+
+    let mut values = VecDeque::new();
+    let mut debug = false;
+
+    let mut parser = lexopt::Parser::from_env();
+    while let Some(arg) = parser.next()? {
+        match arg {
+            Value(val) => values.push_back(val.string()?),
+            Long("debug") => {
+                debug = true;
+            }
+            Long("help") => {
+                println!(
+                    "Usage: {} [--debug] <detection model> <recognition model> <image>",
+                    std::env::args().next().unwrap_or("wasnn-ocr".to_string())
+                );
+                std::process::exit(0);
+            }
+            _ => return Err(arg.unexpected()),
+        }
     }
 
-    let detection_model_name = args.get(1).ok_or("detection model name not specified")?;
-    let recognition_model_name = args.get(2).ok_or("recognition model name not specified")?;
-    let image_path = args.get(3).ok_or("image path not specified")?;
+    Ok(Args {
+        detection_model: values
+            .pop_front()
+            .ok_or("missing `<detection model>` arg")?,
+        recognition_model: values
+            .pop_front()
+            .ok_or("missing `<recognition model>` arg")?,
+        image: values.pop_front().ok_or("missing `<image>` arg")?,
+        debug,
+    })
+}
 
-    let detection_model_bytes = fs::read(detection_model_name)?;
-    let detection_model = Model::load(&detection_model_bytes)?;
+/// Trait for adding context to errors when reading or parsing files.
+trait FileErrorContext<T> {
+    /// If `self` represents a failed operation to read a file, convert the
+    /// error to a message of the form "{context} from {path}: {original_error}".
+    fn file_error_context(self, context: &str, path: &str) -> Result<T, String>;
+}
 
-    let recognition_model_bytes = fs::read(recognition_model_name)?;
-    let recognition_model = Model::load(&recognition_model_bytes)?;
+impl<T, E: std::fmt::Display> FileErrorContext<T> for Result<T, E> {
+    fn file_error_context(self, context: &str, path: &str) -> Result<T, String> {
+        self.map_err(|err| format!("{} from \"{}\": {}", context, path, err))
+    }
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let args = parse_args()?;
+
+    let detection_model_bytes = fs::read(&args.detection_model)
+        .file_error_context("Failed to load text detection model", &args.detection_model)?;
+    let detection_model = Model::load(&detection_model_bytes)
+        .file_error_context("Failed to load text detection model", &args.detection_model)?;
+
+    let recognition_model_bytes = fs::read(&args.recognition_model).file_error_context(
+        "Failed to load text recognition model",
+        &args.recognition_model,
+    )?;
+    let recognition_model = Model::load(&recognition_model_bytes).file_error_context(
+        "Failed to load text recognition model",
+        &args.recognition_model,
+    )?;
 
     // Read image into CHW tensor.
-    let color_img = read_image(image_path).expect("failed to read input image");
+    let color_img =
+        read_image(&args.image).file_error_context("Failed to read image", &args.image)?;
 
     // Convert color CHW tensor to fixed-size greyscale NCHW input expected by model.
     let grey_img = prepare_image(color_img.view());
 
     // Find text components (words) in the input image.
-    let word_rects = detect_words(grey_img.view(), &detection_model, debug)?;
+    let word_rects = detect_words(grey_img.view(), &detection_model, args.debug)?;
 
     // Perform layout analysis to group words into lines, in reading order.
     let [_, img_height, img_width] = grey_img.dims();
@@ -117,13 +161,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         &line_rects,
         page_rect,
         &recognition_model,
-        debug,
+        args.debug,
     )?;
     for line in line_texts {
         println!("{}", line);
     }
 
-    if debug {
+    if args.debug {
         println!(
             "Found {} words, {} lines in image of size {}x{}",
             word_rects.len(),
