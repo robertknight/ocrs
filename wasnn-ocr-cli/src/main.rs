@@ -5,7 +5,7 @@ use std::io::BufWriter;
 use wasnn::Model;
 use wasnn_imageproc::{draw_polygon, Polygon, Rect};
 use wasnn_ocr::page_layout::{find_text_lines, line_polygon};
-use wasnn_ocr::{detect_words, greyscale_image, recognize_text_lines, ZERO_VALUE};
+use wasnn_ocr::{detect_words, prepare_image, recognize_text_lines};
 use wasnn_tensor::{Tensor, TensorLayout, TensorView};
 
 /// Read an image from `path` into a CHW tensor.
@@ -100,10 +100,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Read image into CHW tensor.
     let color_img = read_image(image_path).expect("failed to read input image");
 
-    let normalize_pixel = |pixel| pixel + ZERO_VALUE;
-
     // Convert color CHW tensor to fixed-size greyscale NCHW input expected by model.
-    let grey_img = greyscale_image(color_img.view(), normalize_pixel);
+    let grey_img = prepare_image(color_img.view());
 
     // Find text components (words) in the input image.
     let word_rects = detect_words(grey_img.view(), &detection_model, debug)?;

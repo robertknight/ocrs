@@ -30,7 +30,8 @@ fn round_up<
 // nb. The "E" before "ABCDE" should be the EUR symbol.
 const DEFAULT_ALPHABET: &str = " 0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~EABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-/// The value used to represent fully black pixels in normalized greyscale images.
+/// The value used to represent fully black pixels in OCR input images
+/// prepared by [prepare_image].
 pub const ZERO_VALUE: f32 = -0.5;
 
 /// Convert a CHW image into a greyscale image.
@@ -42,7 +43,7 @@ pub const ZERO_VALUE: f32 = -0.5;
 ///
 /// `normalize_pixel` is a function applied to each greyscale pixel value before
 /// it is written into the output tensor.
-pub fn greyscale_image<F: Fn(f32) -> f32>(img: TensorView<f32>, normalize_pixel: F) -> Tensor<f32> {
+fn greyscale_image<F: Fn(f32) -> f32>(img: TensorView<f32>, normalize_pixel: F) -> Tensor<f32> {
     let [chans, height, width]: [usize; 3] = img.shape().try_into().expect("expected 3 dim input");
     assert!(
         chans == 1 || chans == 3 || chans == 4,
@@ -73,6 +74,14 @@ pub fn greyscale_image<F: Fn(f32) -> f32>(img: TensorView<f32>, normalize_pixel:
         }
     }
     output
+}
+
+/// Prepare an image for use with [detect_words] and [recognize_text_lines].
+///
+/// This converts an input CHW image with values in the range 0-1 to a greyscale
+/// image with values in the range `ZERO_VALUE` to `ZERO_VALUE + 1`.
+pub fn prepare_image(image: TensorView<f32>) -> Tensor<f32> {
+    greyscale_image(image, |pixel| pixel + ZERO_VALUE)
 }
 
 /// Detect text words in a greyscale image.
