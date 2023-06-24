@@ -180,8 +180,8 @@ fn detect_words(
         text_mask.slice((
             ..,
             ..,
-            0..(in_height - pad_bottom as usize),
-            0..(in_width - pad_right as usize),
+            ..(in_height - pad_bottom as usize),
+            ..(in_width - pad_right as usize),
         )),
         img_height as i32,
         img_width as i32,
@@ -267,7 +267,7 @@ fn prepare_text_line_batch(
         .unwrap();
 
         output
-            .slice_mut((group_line_index, 0, .., 0..(line.resized_width as usize)))
+            .slice_mut((group_line_index, 0, .., ..(line.resized_width as usize)))
             .copy_from(&resized_line_img.squeezed());
     }
 
