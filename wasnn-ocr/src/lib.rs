@@ -32,7 +32,7 @@ const DEFAULT_ALPHABET: &str = " 0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~EAB
 
 /// The value used to represent fully black pixels in OCR input images
 /// prepared by [prepare_image].
-pub const ZERO_VALUE: f32 = -0.5;
+pub const BLACK_VALUE: f32 = -0.5;
 
 /// Convert a CHW image into a greyscale image.
 ///
@@ -81,7 +81,7 @@ fn greyscale_image<F: Fn(f32) -> f32>(img: TensorView<f32>, normalize_pixel: F) 
 /// This converts an input CHW image with values in the range 0-1 to a greyscale
 /// image with values in the range `ZERO_VALUE` to `ZERO_VALUE + 1`.
 fn prepare_image(image: TensorView<f32>) -> Tensor<f32> {
-    greyscale_image(image, |pixel| pixel + ZERO_VALUE)
+    greyscale_image(image, |pixel| pixel + BLACK_VALUE)
 }
 
 /// Detect text words in a greyscale image.
@@ -149,7 +149,7 @@ fn detect_words(
         pad(
             image.view(),
             &tensor!([0, 0, 0, 0, 0, 0, pad_bottom, pad_right]),
-            ZERO_VALUE,
+            BLACK_VALUE,
         )?
     } else {
         image.to_tensor()
@@ -200,6 +200,80 @@ fn detect_words(
     Ok(word_rects)
 }
 
+/// Details about a text line needed to prepare the input to the text
+/// recognition model.
+#[derive(Clone)]
+struct TextRecLine {
+    /// Index of this line in the list of lines found in the image.
+    index: usize,
+
+    /// Region of the image containing this line.
+    region: Polygon,
+
+    /// Width to resize this line to.
+    resized_width: i32,
+}
+
+/// Prepare an NCHW tensor containing a batch of text line images, for input
+/// into the text recognition model.
+///
+/// For each line in `lines`, the line region is extracted from `image`, resized
+/// to a fixed `output_height` and a line-specific width, then copied to the
+/// output tensor. Lines in the batch can have different widths, so the output
+/// is padded on the right side to a common width of `output_width`.
+fn prepare_text_line_batch(
+    image: &TensorView<f32>,
+    lines: &[TextRecLine],
+    page_rect: Rect,
+    output_height: usize,
+    output_width: usize,
+) -> Tensor<f32> {
+    let mut output = Tensor::zeros(&[lines.len(), 1, output_height, output_width]);
+    output.data_mut().fill(BLACK_VALUE);
+
+    // Page rect adjusted to only contain coordinates that are valid for
+    // indexing into the input image.
+    let page_index_rect = page_rect.adjust_tlbr(0, 0, -1, -1);
+
+    for (group_line_index, line) in lines.iter().enumerate() {
+        let grey_chan = image.nd_slice([0]);
+
+        let line_rect = line.region.bounding_rect();
+        let mut line_img = Tensor::zeros(&[
+            1,
+            1,
+            line_rect.height() as usize,
+            line_rect.width() as usize,
+        ]);
+        line_img.data_mut().fill(BLACK_VALUE);
+
+        let mut line_img_chan = line_img.nd_slice_mut([0, 0]);
+        for in_p in line.region.fill_iter() {
+            let out_p = Point::from_yx(in_p.y - line_rect.top(), in_p.x - line_rect.left());
+            if !page_index_rect.contains_point(in_p) || !page_index_rect.contains_point(out_p) {
+                continue;
+            }
+            line_img_chan[[out_p.y as usize, out_p.x as usize]] =
+                grey_chan[[in_p.y as usize, in_p.x as usize]];
+        }
+
+        let resized_line_img = resize(
+            line_img.view(),
+            ResizeTarget::Sizes(&tensor!([1, 1, output_height as i32, line.resized_width])),
+            ResizeMode::Linear,
+            CoordTransformMode::default(),
+            NearestMode::default(),
+        )
+        .unwrap();
+
+        output
+            .slice_mut((group_line_index, 0, .., 0..(line.resized_width as usize)))
+            .copy_from(&resized_line_img.squeezed());
+    }
+
+    output
+}
+
 /// Recognize text lines in an image.
 ///
 /// `image` is a CHW greyscale image with values in the range `ZERO_VALUE` to
@@ -233,23 +307,21 @@ fn recognize_text_lines(
         .copied()
         .ok_or("recognition model has no outputs")?;
 
+    // Get the input height that the recognition model expects.
     let rec_img_height = match rec_input_shape[2] {
         Dimension::Fixed(size) => size,
         Dimension::Symbolic(_) => 50,
     };
 
-    // Compute sizes of line images after resizing to fixed height and scaled
-    // width.
-    let resized_line_width = |orig_width, orig_height| {
+    // Compute width to resize a text line image to, for a given height.
+    fn resized_line_width(orig_width: i32, orig_height: i32, height: i32) -> i32 {
         // Min/max widths for resized line images. These must match the PyTorch
         // `HierTextRecognition` dataset loader.
         let min_width = 10.;
         let max_width = 800.;
         let aspect_ratio = orig_width as f32 / orig_height as f32;
-        (rec_img_height as f32 * aspect_ratio)
-            .max(min_width)
-            .min(max_width) as i32
-    };
+        (height as f32 * aspect_ratio).max(min_width).min(max_width) as i32
+    }
 
     // Group lines into batches which will have similar widths after resizing
     // to a fixed height.
@@ -260,23 +332,31 @@ fn recognize_text_lines(
     // such that all line images have a similar width reduces this wastage.
     // There is a trade-off between maximizing the batch size and minimizing
     // the variance in width of images in the batch.
-    let mut line_groups: HashMap<i32, Vec<usize>> = HashMap::new();
+    let mut line_groups: HashMap<i32, Vec<TextRecLine>> = HashMap::new();
     for (line_index, word_rects) in lines.iter().enumerate() {
         let line_rect = bounding_rect(word_rects).expect("line has no words");
-        let resized_width = resized_line_width(line_rect.width(), line_rect.height());
+        let resized_width =
+            resized_line_width(line_rect.width(), line_rect.height(), rec_img_height as i32);
         let group_width = round_up(resized_width, 50);
-        line_groups.entry(group_width).or_default().push(line_index);
+        line_groups
+            .entry(group_width)
+            .or_default()
+            .push(TextRecLine {
+                index: line_index,
+                region: Polygon::new(line_polygon(word_rects)),
+                resized_width,
+            });
     }
 
     // Split large line groups up to better exploit parallelism in the loop
     // below.
     let max_lines_per_group = 20;
-    let line_groups: Vec<(i32, Vec<usize>)> = line_groups
+    let line_groups: Vec<(i32, Vec<TextRecLine>)> = line_groups
         .into_iter()
-        .flat_map(|(group_width, line_indices)| {
-            line_indices
+        .flat_map(|(group_width, lines)| {
+            lines
                 .chunks(max_lines_per_group)
-                .map(move |chunk| (group_width, chunk.to_vec()))
+                .map(|chunk| (group_width, chunk.to_vec()))
                 .collect::<Vec<_>>()
         })
         .collect();
@@ -285,92 +365,44 @@ fn recognize_text_lines(
     // to recognition result.
     let line_rec_results: HashMap<usize, CtcHypothesis> = line_groups
         .par_iter()
-        .flat_map(|(group_width, line_indices)| {
+        .flat_map(|(group_width, lines)| {
             if debug {
                 println!(
                     "Processing group of {} lines of width {}",
-                    line_indices.len(),
+                    lines.len(),
                     group_width,
                 );
             }
 
-            let mut line_rec_input =
-                Tensor::zeros(&[line_indices.len(), 1, rec_img_height, *group_width as usize]);
-
-            // Extract and resize line images
-            for (group_line_index, line_index) in line_indices.iter().copied().enumerate() {
-                let word_rects = &lines[line_index];
-                let line_poly = Polygon::new(line_polygon(word_rects));
-                let grey_chan = image.nd_slice([0]);
-
-                // Extract line image
-                let line_rect = line_poly.bounding_rect();
-                let mut out_img = Tensor::zeros(&[
-                    1,
-                    1,
-                    line_rect.height() as usize,
-                    line_rect.width() as usize,
-                ]);
-                out_img.iter_mut().for_each(|el| *el = 0.5);
-
-                // Page rect adjusted to only contain coordinates that are valid for
-                // indexing into the input image.
-                let page_index_rect = page_rect.adjust_tlbr(0, 0, -1, -1);
-
-                let mut out_hw = out_img.nd_slice_mut([0, 0]);
-                for in_p in line_poly.fill_iter() {
-                    let out_p = Point::from_yx(in_p.y - line_rect.top(), in_p.x - line_rect.left());
-
-                    if !page_index_rect.contains_point(in_p)
-                        || !page_index_rect.contains_point(out_p)
-                    {
-                        continue;
-                    }
-
-                    let normalized_pixel = grey_chan[[in_p.y as usize, in_p.x as usize]];
-                    out_hw[[out_p.y as usize, out_p.x as usize]] = normalized_pixel;
-                }
-
-                let line_img_width = resized_line_width(line_rect.width(), line_rect.height());
-                let resized_line_img = resize(
-                    out_img.view(),
-                    ResizeTarget::Sizes(&tensor!([1, 1, rec_img_height as i32, line_img_width])),
-                    ResizeMode::Linear,
-                    CoordTransformMode::default(),
-                    NearestMode::default(),
-                )
-                .unwrap();
-
-                // Copy resized line image to line recognition model input.
-                line_rec_input
-                    .slice_mut((group_line_index, 0, .., 0..(line_img_width as usize)))
-                    .copy_from(&resized_line_img.squeezed());
-            }
+            let rec_input = prepare_text_line_batch(
+                &image,
+                lines,
+                page_rect,
+                rec_img_height,
+                *group_width as usize,
+            );
 
             // Perform text recognition on the line batch.
             let rec_output = model
                 .run(
-                    &[(rec_input_id, (&line_rec_input).into())],
+                    &[(rec_input_id, (&rec_input).into())],
                     &[rec_output_id],
                     None,
                 )
                 .unwrap();
-
-            // Extract sequence as [seq, batch, class]
             let mut rec_sequence = rec_output[0].as_float_ref().unwrap().to_tensor();
 
-            // Transpose to [batch, seq, class]
+            // Transpose from [seq, batch, class] => [batch, seq, class]
             rec_sequence.permute(&[1, 0, 2]);
 
-            line_indices
+            lines
                 .iter()
-                .copied()
                 .enumerate()
-                .map(move |(group_line_index, line_index)| {
+                .map(|(group_line_index, line)| {
                     let decoder = CtcDecoder::new();
                     let input_seq = rec_sequence.slice([group_line_index]);
                     let decode_result = decoder.decode_greedy(input_seq.clone());
-                    (line_index, decode_result)
+                    (line.index, decode_result)
                 })
                 .collect::<Vec<_>>()
         })
