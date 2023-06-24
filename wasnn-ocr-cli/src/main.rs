@@ -90,7 +90,7 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             Long("help") => {
                 println!(
                     "Usage: {} [--debug] <detection model> <recognition model> <image>",
-                    std::env::args().next().unwrap_or("wasnn-ocr".to_string())
+                    parser.bin_name().unwrap_or("wasnn-ocr")
                 );
                 std::process::exit(0);
             }
