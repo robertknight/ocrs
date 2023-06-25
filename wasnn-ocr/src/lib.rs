@@ -10,6 +10,7 @@ use wasnn_imageproc::{bounding_rect, BoundingRect, Point, Polygon, Rect, Rotated
 use wasnn_tensor::{tensor, Tensor, TensorLayout, TensorView};
 
 pub mod page_layout;
+mod wasm_api;
 
 use page_layout::{find_connected_component_rects, find_text_lines, line_polygon};
 
@@ -440,7 +441,8 @@ pub struct OcrEngine {
 /// Input image for OCR analysis. Instances are created using
 /// [OcrEngine::prepare_input]
 pub struct OcrInput {
-    image: Tensor<f32>,
+    /// CHW tensor with normalized pixel values in [BLACK_VALUE, BLACK_VALUE + 1.].
+    pub(crate) image: Tensor<f32>,
 }
 
 impl OcrEngine {

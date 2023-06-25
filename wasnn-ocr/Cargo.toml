@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 rayon = "1.7.0"
+wasm-bindgen = "0.2.87"
 wasnn = { path = "../" }
 wasnn-imageproc = { path = "../wasnn-imageproc" }
 wasnn-tensor = { path = "../wasnn-tensor" }
@@ -13,4 +14,4 @@ wasnn-tensor = { path = "../wasnn-tensor" }
 fastrand = "1.9.0"
 
 [lib]
-crate-type = ["lib"]
+crate-type = ["lib", "cdylib"]
