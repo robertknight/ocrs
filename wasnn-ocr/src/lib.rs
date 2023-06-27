@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::fmt;
+use std::fmt::Write;
 
 use rayon::prelude::*;
 
@@ -213,7 +215,7 @@ struct TextRecLine {
     region: Polygon,
 
     /// Width to resize this line to.
-    resized_width: i32,
+    resized_width: u32,
 }
 
 /// Prepare an NCHW tensor containing a batch of text line images, for input
@@ -261,7 +263,12 @@ fn prepare_text_line_batch(
 
         let resized_line_img = resize(
             line_img.view(),
-            ResizeTarget::Sizes(&tensor!([1, 1, output_height as i32, line.resized_width])),
+            ResizeTarget::Sizes(&tensor!([
+                1,
+                1,
+                output_height as i32,
+                line.resized_width as i32
+            ])),
             ResizeMode::Linear,
             CoordTransformMode::default(),
             NearestMode::default(),
@@ -274,6 +281,70 @@ fn prepare_text_line_batch(
     }
 
     output
+}
+
+/// Details of a single character that was recognized.
+pub struct TextChar {
+    /// Character that was recognized.
+    pub char: char,
+
+    /// Approximate bounding rectangle of character in input image.
+    pub rect: Rect,
+}
+
+/// Result of recognizing a line of text.
+///
+/// This includes the sequence of characters that were found and associated
+/// metadata (eg. bounding boxes).
+pub struct TextLine {
+    chars: Vec<TextChar>,
+}
+
+/// Subsequence of a [TextLine] that contains a sequence of non-space characters.
+pub struct TextWord<'a> {
+    chars: &'a [TextChar],
+}
+
+impl<'a> TextWord<'a> {
+    fn new(chars: &'a [TextChar]) -> TextWord {
+        assert!(!chars.is_empty());
+        TextWord { chars }
+    }
+
+    /// Return the bounding rectangle of all characters in this word.
+    pub fn bounding_rect(&self) -> Rect {
+        bounding_rect(self.chars.iter().map(|c| &c.rect)).expect("expected non-empty word")
+    }
+}
+
+impl TextLine {
+    /// Return the bounding rectangle of the line. This can be `None` if the
+    /// line is empty (ie. contains no characters).
+    pub fn bounding_rect(&self) -> Option<Rect> {
+        bounding_rect(self.chars.iter().map(|c| &c.rect))
+    }
+
+    /// Return the bounding rects of each character in the line.
+    pub fn chars(&self) -> &[TextChar] {
+        &self.chars
+    }
+
+    /// Return an iterator over words in this line.
+    pub fn words(&self) -> impl Iterator<Item = TextWord> {
+        self.chars()
+            .split(|c| c.char == ' ')
+            .filter(|chars| !chars.is_empty())
+            .map(TextWord::new)
+    }
+}
+
+impl fmt::Display for TextLine {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for c in self.chars.iter().map(|c| c.char) {
+            f.write_char(c)?;
+        }
+        Ok(())
+    }
 }
 
 /// Recognize text lines in an image.
@@ -291,7 +362,7 @@ fn recognize_text_lines(
     lines: &[Vec<RotatedRect>],
     model: &Model,
     debug: bool,
-) -> Result<Vec<String>, Box<dyn Error>> {
+) -> Result<Vec<TextLine>, Box<dyn Error>> {
     let [_, img_height, img_width] = image.dims();
     let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
     let rec_input_id = model
@@ -316,13 +387,13 @@ fn recognize_text_lines(
     };
 
     // Compute width to resize a text line image to, for a given height.
-    fn resized_line_width(orig_width: i32, orig_height: i32, height: i32) -> i32 {
+    fn resized_line_width(orig_width: i32, orig_height: i32, height: i32) -> u32 {
         // Min/max widths for resized line images. These must match the PyTorch
         // `HierTextRecognition` dataset loader.
         let min_width = 10.;
         let max_width = 800.;
         let aspect_ratio = orig_width as f32 / orig_height as f32;
-        (height as f32 * aspect_ratio).max(min_width).min(max_width) as i32
+        (height as f32 * aspect_ratio).max(min_width).min(max_width) as u32
     }
 
     // Group lines into batches which will have similar widths after resizing
@@ -341,7 +412,7 @@ fn recognize_text_lines(
             resized_line_width(line_rect.width(), line_rect.height(), rec_img_height as i32);
         let group_width = round_up(resized_width, 50);
         line_groups
-            .entry(group_width)
+            .entry(group_width as i32)
             .or_default()
             .push(TextRecLine {
                 index: line_index,
@@ -363,10 +434,25 @@ fn recognize_text_lines(
         })
         .collect();
 
-    // Run text recognition on batches of lines. Produces a map of line index
-    // to recognition result.
-    let line_rec_results: HashMap<usize, CtcHypothesis> = line_groups
-        .par_iter()
+    struct LineRecResult {
+        /// Input line that was recognized.
+        line: TextRecLine,
+
+        /// Length of input sequences to recognition model, padded so that all
+        /// lines in batch have the same length.
+        rec_input_len: usize,
+
+        /// Length of output sequences from recognition model, used as input to
+        /// CTC decoding.
+        ctc_input_len: usize,
+
+        /// Output label sequence produced by CTC decoding.
+        ctc_output: CtcHypothesis,
+    }
+
+    // Run text recognition on batches of lines.
+    let mut line_rec_results: Vec<LineRecResult> = line_groups
+        .into_par_iter()
         .flat_map(|(group_width, lines)| {
             if debug {
                 println!(
@@ -378,10 +464,10 @@ fn recognize_text_lines(
 
             let rec_input = prepare_text_line_batch(
                 &image,
-                lines,
+                &lines,
                 page_rect,
                 rec_img_height,
-                *group_width as usize,
+                group_width as usize,
             );
 
             // Perform text recognition on the line batch.
@@ -396,26 +482,90 @@ fn recognize_text_lines(
 
             // Transpose from [seq, batch, class] => [batch, seq, class]
             rec_sequence.permute(&[1, 0, 2]);
+            let ctc_input_len = rec_sequence.shape()[1];
 
+            // Apply CTC decoding to get the label sequence for each line.
             lines
-                .iter()
+                .into_iter()
                 .enumerate()
                 .map(|(group_line_index, line)| {
                     let decoder = CtcDecoder::new();
                     let input_seq = rec_sequence.slice([group_line_index]);
-                    let decode_result = decoder.decode_greedy(input_seq.clone());
-                    (line.index, decode_result)
+                    let ctc_output = decoder.decode_greedy(input_seq.clone());
+                    LineRecResult {
+                        line,
+                        rec_input_len: group_width as usize,
+                        ctc_input_len,
+                        ctc_output,
+                    }
                 })
                 .collect::<Vec<_>>()
         })
         .collect();
 
-    let line_texts = (0..lines.len())
-        .filter_map(|idx| line_rec_results.get(&idx))
-        .map(|result| result.to_string(DEFAULT_ALPHABET))
+    line_rec_results.sort_by_key(|result| result.line.index);
+
+    // Decode recognition results into sequences of characters with associated
+    // metadata (eg. bounding boxes).
+    let text_lines: Vec<TextLine> = line_rec_results
+        .into_iter()
+        .map(|result| {
+            let line_rect = result.line.region.bounding_rect();
+            let x_scale_factor = (line_rect.width() as f32) / (result.line.resized_width as f32);
+
+            // Calculate how much the recognition model downscales the image
+            // width. We assume this will be an integer factor, or close to it
+            // if the input width is not an exact multiple of the downscaling
+            // factor.
+            let downsample_factor =
+                (result.rec_input_len as f32 / result.ctc_input_len as f32).round() as u32;
+
+            let steps = result.ctc_output.steps();
+            let text_line: Vec<TextChar> = steps
+                .iter()
+                .enumerate()
+                .map(|(i, step)| {
+                    let end_pos = if let Some(next_step) = steps.get(i + 1) {
+                        next_step.pos
+                    } else {
+                        result.line.resized_width / downsample_factor
+                    };
+
+                    // X coord range of character in line recognition input image.
+                    let rec_input_x_range =
+                        (step.pos * downsample_factor)..(end_pos * downsample_factor);
+
+                    // X coord range of character in original image. Compared to the
+                    // line in the input image, the input to the recognition model is
+                    // scaled and translated, but not rotated or otherwise transformed.
+                    //
+                    // If rectification is added in future, that will need to be undone
+                    // here too.
+                    let in_x_start =
+                        line_rect.left() + (rec_input_x_range.start as f32 * x_scale_factor) as i32;
+                    let in_x_end =
+                        line_rect.left() + (rec_input_x_range.end as f32 * x_scale_factor) as i32;
+                    let char = DEFAULT_ALPHABET
+                        .chars()
+                        .nth((step.label - 1) as usize)
+                        .unwrap_or('?');
+
+                    TextChar {
+                        char,
+                        rect: Rect::from_tlbr(
+                            line_rect.top(),
+                            in_x_start,
+                            line_rect.bottom(),
+                            in_x_end,
+                        ),
+                    }
+                })
+                .collect();
+            TextLine { chars: text_line }
+        })
         .collect();
 
-    Ok(line_texts)
+    Ok(text_lines)
 }
 
 /// Configuration for an [OcrEngine] instance.
@@ -495,7 +645,7 @@ impl OcrEngine {
         &self,
         input: &OcrInput,
         lines: &[Vec<RotatedRect>],
-    ) -> Result<Vec<String>, Box<dyn Error>> {
+    ) -> Result<Vec<TextLine>, Box<dyn Error>> {
         let Some(recognition_model) = self.params.recognition_model.as_ref() else {
             return Err("Recognition model not loaded".into());
         };
@@ -511,7 +661,12 @@ impl OcrEngine {
     pub fn get_text(&self, input: &OcrInput) -> Result<String, Box<dyn Error>> {
         let word_rects = self.detect_words(input)?;
         let line_rects = self.find_text_lines(input, &word_rects);
-        let line_texts = self.recognize_text(input, &line_rects)?;
-        Ok(line_texts.join("\n"))
+        let text = self
+            .recognize_text(input, &line_rects)?
+            .into_iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        Ok(text)
     }
 }

@@ -3,11 +3,11 @@ use std::error::Error;
 use std::fmt;
 use std::fs;
 use std::io::BufWriter;
+use std::iter::zip;
 
-use wasnn_imageproc::{draw_polygon, Polygon};
-use wasnn_ocr::page_layout::line_polygon;
+use wasnn_imageproc::{draw_polygon, Point};
 use wasnn_ocr::{OcrEngine, OcrEngineParams};
-use wasnn_tensor::{Tensor, TensorLayout, TensorView};
+use wasnn_tensor::{NdTensorViewMut, Tensor, TensorLayout, TensorView};
 
 mod models;
 use models::{load_model, ModelSource};
@@ -154,6 +154,37 @@ impl<T, E: std::fmt::Display> FileErrorContext<T> for Result<T, E> {
     }
 }
 
+/// Utility for drawing into an image tensor.
+struct Painter<'a, T> {
+    /// CHW image tensor.
+    surface: NdTensorViewMut<'a, T, 3>,
+
+    /// Stroke color for RGB channels.
+    stroke: [T; 3],
+}
+
+impl<'a, T: Copy + Default> Painter<'a, T> {
+    /// Create a Painter which draws into the CHW tensor `surface`.
+    fn new(surface: NdTensorViewMut<'a, T, 3>) -> Painter<'a, T> {
+        Painter {
+            surface,
+            stroke: [T::default(); 3],
+        }
+    }
+
+    /// Set the RGB color values used by the `draw_*` methods.
+    fn set_stroke(&mut self, stroke: [T; 3]) {
+        self.stroke = stroke;
+    }
+
+    /// Draw a polygon into the surface.
+    fn draw_polygon(&mut self, points: &[Point]) {
+        for i in 0..3 {
+            draw_polygon(self.surface.slice_mut([i]), points, self.stroke[i]);
+        }
+    }
+}
+
 /// Default text detection model.
 const DETECTION_MODEL: &str = "http://localhost:2000/text-detection.model";
 
@@ -196,7 +227,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let word_rects = engine.detect_words(&ocr_input)?;
     let line_rects = engine.find_text_lines(&ocr_input, &word_rects);
     let line_texts = engine.recognize_text(&ocr_input, &line_rects)?;
-    for line in line_texts {
+    for line in &line_texts {
         println!("{}", line);
     }
 
@@ -210,17 +241,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
 
         let mut annotated_img = color_img;
+        let mut painter = Painter::new(annotated_img.nd_view_mut());
+        let colors = [[0.9, 0., 0.], [0., 0.9, 0.], [0., 0., 0.9]];
 
-        for line in line_rects {
-            let line_poly = Polygon::new(line_polygon(&line));
-            draw_polygon(annotated_img.nd_slice_mut([0]), line_poly.vertices(), 0.9); // Red
-            draw_polygon(annotated_img.nd_slice_mut([1]), line_poly.vertices(), 0.); // Green
-            draw_polygon(annotated_img.nd_slice_mut([2]), line_poly.vertices(), 0.);
-            // Blue
+        for line in &line_texts {
+            for (text_word, color) in zip(line.words(), colors.into_iter().cycle()) {
+                painter.set_stroke(color);
+                painter.draw_polygon(&text_word.bounding_rect().corners());
+            }
         }
 
         // Write out the annotated input image.
-        write_image("ocr-detection-output.png", annotated_img.view())?;
+        write_image("ocr-debug-output.png", annotated_img.view())?;
     }
 
     Ok(())
