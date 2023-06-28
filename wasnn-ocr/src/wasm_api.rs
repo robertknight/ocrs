@@ -85,7 +85,7 @@ impl OcrEngine {
 
         let tensor = TensorView::from_data(&[height, width, channels], data)
             .permuted(&[2, 0, 1]) // HWC => CHW
-            .map(|x| (x as f32) / 255.);
+            .map(|x| (*x as f32) / 255.);
         self.engine
             .prepare_input(tensor.view())
             .map(|input| Image { input })

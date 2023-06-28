@@ -189,7 +189,7 @@ fn detect_words(
         img_width as i32,
     )?;
     let threshold = 0.2;
-    let binary_mask = text_mask.map(|prob| if prob > threshold { 1i32 } else { 0 });
+    let binary_mask = text_mask.map(|prob| if *prob > threshold { 1i32 } else { 0 });
 
     // Distance to expand bounding boxes by. This is useful when the model is
     // trained to assign a positive label to pixels in a smaller area than the
