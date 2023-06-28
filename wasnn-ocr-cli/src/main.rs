@@ -35,9 +35,9 @@ fn write_image(path: &str, img: TensorView<f32>) -> Result<(), Box<dyn Error>> {
         return Err("Expected CHW input".into());
     }
 
-    let img_width = img.shape()[img.ndim() - 1];
-    let img_height = img.shape()[img.ndim() - 2];
-    let color_type = match img.shape()[img.ndim() - 3] {
+    let img_width = img.size(img.ndim() - 1);
+    let img_height = img.size(img.ndim() - 2);
+    let color_type = match img.size(img.ndim() - 3) {
         1 => png::ColorType::Grayscale,
         3 => png::ColorType::Rgb,
         4 => png::ColorType::Rgba,
@@ -163,8 +163,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             "Found {} words, {} lines in image of size {}x{}",
             word_rects.len(),
             line_rects.len(),
-            color_img.shape()[2],
-            color_img.shape()[1],
+            color_img.size(2),
+            color_img.size(1),
         );
 
         let mut annotated_img = color_img;

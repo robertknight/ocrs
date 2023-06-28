@@ -113,17 +113,17 @@ pub struct Image {
 impl Image {
     /// Return the number of channels in the image.
     pub fn channels(&self) -> usize {
-        self.input.image.shape()[0]
+        self.input.image.size(0)
     }
 
     /// Return the width of the image.
     pub fn width(&self) -> usize {
-        self.input.image.shape()[2]
+        self.input.image.size(2)
     }
 
     /// Return the height of the image.
     pub fn height(&self) -> usize {
-        self.input.image.shape()[1]
+        self.input.image.size(1)
     }
 
     /// Return the image data in row-major, channels-last order.
