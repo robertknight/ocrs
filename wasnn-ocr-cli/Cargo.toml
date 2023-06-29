@@ -11,6 +11,8 @@ wasnn-imageproc = { path = "../wasnn-imageproc" }
 wasnn-tensor = { path = "../wasnn-tensor" }
 wasnn-ocr = { path = "../wasnn-ocr" }
 lexopt = "0.3.0"
+ureq = "2.7.1"
+url = "2.4.0"
 
 [[bin]]
 name = "wasnn-ocr"
