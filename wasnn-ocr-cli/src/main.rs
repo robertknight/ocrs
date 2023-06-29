@@ -1,13 +1,16 @@
 use std::collections::VecDeque;
 use std::error::Error;
+use std::fmt;
 use std::fs;
 use std::io::BufWriter;
 
-use wasnn::Model;
 use wasnn_imageproc::{draw_polygon, Polygon};
 use wasnn_ocr::page_layout::line_polygon;
 use wasnn_ocr::{OcrEngine, OcrEngineParams};
 use wasnn_tensor::{Tensor, TensorLayout, TensorView};
+
+mod models;
+use models::{load_model, ModelSource};
 
 /// Read an image from `path` into a CHW tensor.
 fn read_image(path: &str) -> Result<Tensor<f32>, Box<dyn Error>> {
@@ -68,9 +71,16 @@ fn image_from_tensor(tensor: TensorView<f32>) -> Vec<u8> {
 }
 
 struct Args {
-    detection_model: String,
-    recognition_model: String,
+    /// Path to a text detection model.
+    detection_model: Option<String>,
+
+    /// Path to a text recognition model.
+    recognition_model: Option<String>,
+
+    /// Path to image to process.
     image: String,
+
+    /// Enable debug output.
     debug: bool,
 }
 
@@ -79,6 +89,8 @@ fn parse_args() -> Result<Args, lexopt::Error> {
 
     let mut values = VecDeque::new();
     let mut debug = false;
+    let mut detection_model = None;
+    let mut recognition_model = None;
 
     let mut parser = lexopt::Parser::from_env();
     while let Some(arg) = parser.next()? {
@@ -87,10 +99,33 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             Long("debug") => {
                 debug = true;
             }
+            Long("detect-model") => {
+                detection_model = Some(parser.value()?.string()?);
+            }
+            Long("rec-model") => {
+                recognition_model = Some(parser.value()?.string()?);
+            }
             Long("help") => {
                 println!(
-                    "Usage: {} [--debug] <detection model> <recognition model> <image>",
-                    parser.bin_name().unwrap_or("wasnn-ocr")
+                    "Read text in images.
+
+Usage: {bin_name} [OPTIONS] <image>
+
+Options:
+
+  --debug
+
+    Enable debug output.
+
+  --detect-model <path>
+
+    Use a custom text detection model.
+
+  --rec-model <path>
+
+    Use a custom text recognition model.
+",
+                    bin_name = parser.bin_name().unwrap_or("wasnn-ocr")
                 );
                 std::process::exit(0);
             }
@@ -99,45 +134,52 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     }
 
     Ok(Args {
-        detection_model: values
-            .pop_front()
-            .ok_or("missing `<detection model>` arg")?,
-        recognition_model: values
-            .pop_front()
-            .ok_or("missing `<recognition model>` arg")?,
+        detection_model,
+        recognition_model,
         image: values.pop_front().ok_or("missing `<image>` arg")?,
         debug,
     })
 }
 
-/// Trait for adding context to errors when reading or parsing files.
+/// Adds context to an error reading or parsing a file.
 trait FileErrorContext<T> {
     /// If `self` represents a failed operation to read a file, convert the
     /// error to a message of the form "{context} from {path}: {original_error}".
-    fn file_error_context(self, context: &str, path: &str) -> Result<T, String>;
+    fn file_error_context<P: fmt::Display>(self, context: &str, path: P) -> Result<T, String>;
 }
 
 impl<T, E: std::fmt::Display> FileErrorContext<T> for Result<T, E> {
-    fn file_error_context(self, context: &str, path: &str) -> Result<T, String> {
+    fn file_error_context<P: fmt::Display>(self, context: &str, path: P) -> Result<T, String> {
         self.map_err(|err| format!("{} from \"{}\": {}", context, path, err))
     }
 }
 
+/// Default text detection model.
+const DETECTION_MODEL: &str = "http://localhost:2000/text-detection.model";
+
+/// Default text recognition model.
+const RECOGNITION_MODEL: &str = "http://localhost:2000/text-recognition.model";
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args = parse_args()?;
 
-    let detection_model_bytes = fs::read(&args.detection_model)
-        .file_error_context("Failed to load text detection model", &args.detection_model)?;
-    let detection_model = Model::load(&detection_model_bytes)
-        .file_error_context("Failed to load text detection model", &args.detection_model)?;
+    // Fetch and load ML models.
+    let detection_model_src = args
+        .detection_model
+        .as_ref()
+        .map(|path| ModelSource::Path(path))
+        .unwrap_or(ModelSource::Url(DETECTION_MODEL));
+    let detection_model = load_model(detection_model_src)
+        .file_error_context("Failed to load text detection model", detection_model_src)?;
 
-    let recognition_model_bytes = fs::read(&args.recognition_model).file_error_context(
+    let recognition_model_src = args
+        .recognition_model
+        .as_ref()
+        .map(|path| ModelSource::Path(path))
+        .unwrap_or(ModelSource::Url(RECOGNITION_MODEL));
+    let recognition_model = load_model(recognition_model_src).file_error_context(
         "Failed to load text recognition model",
-        &args.recognition_model,
-    )?;
-    let recognition_model = Model::load(&recognition_model_bytes).file_error_context(
-        "Failed to load text recognition model",
-        &args.recognition_model,
+        recognition_model_src,
     )?;
 
     // Read image into CHW tensor.
