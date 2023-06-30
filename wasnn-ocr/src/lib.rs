@@ -336,7 +336,7 @@ fn recognize_text_lines(
     // the variance in width of images in the batch.
     let mut line_groups: HashMap<i32, Vec<TextRecLine>> = HashMap::new();
     for (line_index, word_rects) in lines.iter().enumerate() {
-        let line_rect = bounding_rect(word_rects).expect("line has no words");
+        let line_rect = bounding_rect(word_rects.iter()).expect("line has no words");
         let resized_width =
             resized_line_width(line_rect.width(), line_rect.height(), rec_img_height as i32);
         let group_width = round_up(resized_width, 50);
