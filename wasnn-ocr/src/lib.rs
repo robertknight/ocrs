@@ -8,7 +8,9 @@ use rayon::prelude::*;
 use wasnn::ctc::{CtcDecoder, CtcHypothesis};
 use wasnn::ops::{pad, resize, CoordTransformMode, NearestMode, ResizeMode, ResizeTarget};
 use wasnn::{Dimension, Model, RunOptions};
-use wasnn_imageproc::{bounding_rect, BoundingRect, Point, Polygon, Rect, RotatedRect};
+use wasnn_imageproc::{
+    bounding_rect, min_area_rect, BoundingRect, Point, Polygon, Rect, RotatedRect,
+};
 use wasnn_tensor::{tensor, Tensor, TensorLayout, TensorView};
 
 mod log;
@@ -315,6 +317,12 @@ impl<'a> TextWord<'a> {
     pub fn bounding_rect(&self) -> Rect {
         bounding_rect(self.chars.iter().map(|c| &c.rect)).expect("expected non-empty word")
     }
+
+    /// Return the oriented bounding rectangle of all characters in this word.
+    pub fn rotated_rect(&self) -> RotatedRect {
+        let points: Vec<_> = self.chars.iter().flat_map(|c| c.rect.corners()).collect();
+        min_area_rect(&points).expect("expected non-empty word")
+    }
 }
 
 impl TextLine {
@@ -347,6 +355,37 @@ impl fmt::Display for TextLine {
     }
 }
 
+/// Return the min and max Y coordinates along edges of `poly` which have a
+/// given X coordinate.
+fn min_max_ys_for_x(poly: Polygon<&[Point]>, x: i32) -> Option<[i32; 2]> {
+    poly.edges()
+        .filter_map(|e| e.y_for_x(x as f32).map(|y| y.round() as i32))
+        .fold(None, |min_max, y| {
+            min_max
+                .map(|[min, max]| [min.min(y), max.max(y)])
+                .or(Some([y, y]))
+        })
+}
+
+/// Return the bounding rectangle of a character within a line polygon that
+/// has X coordinates ranging from `min_x` to `max_x`.
+fn char_rect(line_poly: Polygon<&[Point]>, min_x: i32, max_x: i32) -> Rect {
+    let default_min_max = || {
+        let rect = line_poly.bounding_rect();
+        [rect.top(), rect.bottom()]
+    };
+    let [min_left_y, max_left_y] =
+        min_max_ys_for_x(line_poly, min_x).unwrap_or_else(default_min_max);
+    let [min_right_y, max_right_y] =
+        min_max_ys_for_x(line_poly, max_x).unwrap_or_else(default_min_max);
+    Rect::from_tlbr(
+        min_left_y.min(min_right_y),
+        min_x,
+        max_left_y.max(max_right_y),
+        max_x,
+    )
+}
+
 /// Recognize text lines in an image.
 ///
 /// `image` is a CHW greyscale image with values in the range `ZERO_VALUE` to
@@ -356,7 +395,7 @@ impl fmt::Display for TextLine {
 /// tensor of log probabilities of character classes, which must be converted to
 /// a character sequence using CTC decoding.
 ///
-/// The result is a list containing the recognized text for each input line.
+/// Entries in the result can be `None` if no text was found in a line.
 fn recognize_text_lines(
     image: TensorView<f32>,
     lines: &[Vec<RotatedRect>],
@@ -532,19 +571,13 @@ fn recognize_text_lines(
                     };
 
                     // X coord range of character in line recognition input image.
-                    let rec_input_x_range =
-                        (step.pos * downsample_factor)..(end_pos * downsample_factor);
+                    let start_x = step.pos * downsample_factor;
+                    let end_x = end_pos * downsample_factor;
 
-                    // X coord range of character in original image. Compared to the
-                    // line in the input image, the input to the recognition model is
-                    // scaled and translated, but not rotated or otherwise transformed.
-                    //
-                    // If rectification is added in future, that will need to be undone
-                    // here too.
-                    let in_x_start =
-                        line_rect.left() + (rec_input_x_range.start as f32 * x_scale_factor) as i32;
-                    let in_x_end =
-                        line_rect.left() + (rec_input_x_range.end as f32 * x_scale_factor) as i32;
+                    // Map X coords to those of the input image.
+                    let [start_x, end_x] = [start_x, end_x]
+                        .map(|x| line_rect.left() + (x as f32 * x_scale_factor) as i32);
+
                     let char = DEFAULT_ALPHABET
                         .chars()
                         .nth((step.label - 1) as usize)
@@ -552,12 +585,7 @@ fn recognize_text_lines(
 
                     TextChar {
                         char,
-                        rect: Rect::from_tlbr(
-                            line_rect.top(),
-                            in_x_start,
-                            line_rect.bottom(),
-                            in_x_end,
-                        ),
+                        rect: char_rect(result.line.region.borrow(), start_x, end_x),
                     }
                 })
                 .collect();

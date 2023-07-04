@@ -244,10 +244,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut painter = Painter::new(annotated_img.nd_view_mut());
         let colors = [[0.9, 0., 0.], [0., 0.9, 0.], [0., 0., 0.9]];
 
-        for line in &line_texts {
-            for (text_word, color) in zip(line.words(), colors.into_iter().cycle()) {
+        for (line, color) in zip(line_texts.iter(), colors.into_iter().cycle()) {
+            for text_word in line.words() {
                 painter.set_stroke(color);
-                painter.draw_polygon(&text_word.bounding_rect().corners());
+                painter.draw_polygon(&text_word.rotated_rect().corners());
             }
         }
 
