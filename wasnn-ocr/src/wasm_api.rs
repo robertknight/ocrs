@@ -1,9 +1,10 @@
 use wasm_bindgen::prelude::*;
 
 use wasnn::Model;
+use wasnn_imageproc::BoundingRect;
 use wasnn_tensor::{TensorLayout, TensorView};
 
-use crate::{OcrEngine as BaseOcrEngine, OcrEngineParams, OcrInput};
+use crate::{OcrEngine as BaseOcrEngine, OcrEngineParams, OcrInput, TextItem};
 
 /// Options for constructing an [OcrEngine].
 #[derive(Default)]
@@ -101,6 +102,27 @@ impl OcrEngine {
             .get_text(&image.input)
             .map_err(|e| e.to_string())
     }
+
+    /// Detect and recognize text in an image.
+    ///
+    /// Returns a list of `TextLine` objects that can be used to query the text
+    /// and bounding boxes of each line.
+    #[wasm_bindgen(js_name = getTextLines)]
+    pub fn get_text_lines(&self, image: &Image) -> Result<TextLineList, String> {
+        let words = self
+            .engine
+            .detect_words(&image.input)
+            .map_err(|e| e.to_string())?;
+        let lines = self.engine.find_text_lines(&image.input, &words);
+        let text_lines = self
+            .engine
+            .recognize_text(&image.input, &lines)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .filter_map(|text_line| text_line.map(|tl| TextLine { line: tl }))
+            .collect();
+        Ok(TextLineList::from_vec(text_lines))
+    }
 }
 
 /// A pre-processed image that can be passed as input to `OcrEngine.loadImage`.
@@ -139,3 +161,145 @@ impl Image {
             .collect()
     }
 }
+
+#[wasm_bindgen]
+#[derive(Clone)]
+pub struct RotatedRect {
+    rect: wasnn_imageproc::RotatedRect,
+}
+
+#[wasm_bindgen]
+impl RotatedRect {
+    /// Return an array of the X and Y coordinates of corners of this rectangle,
+    /// arranged as `[x0, y0, ... x3, y3]`.
+    pub fn corners(&self) -> Vec<i32> {
+        self.rect
+            .corners()
+            .into_iter()
+            .flat_map(|c| [c.x, c.y])
+            .collect()
+    }
+
+    /// Return the coordinates of the axis-aligned bounding rectangle of this
+    /// rotated rect.
+    ///
+    /// The result is a `[left, top, right, bottom]` array of coordinates.
+    #[wasm_bindgen(js_name = boundingRect)]
+    pub fn bounding_rect(&self) -> Vec<i32> {
+        let br = self.rect.bounding_rect();
+        [br.left(), br.top(), br.right(), br.bottom()].into()
+    }
+}
+
+/// Create a collection type that can be used to accept or return collections
+/// from / to JS. On the JS side, these collections are similar to DOM APIs
+/// like [NodeList](https://developer.mozilla.org/en-US/docs/Web/API/NodeList)
+/// and can be enhanced by implementing a `[Symbol.iterator]` method so they
+/// work with `Array.from`, `for ... of` etc:
+///
+/// ```js
+/// ThingList.prototype[Symbol.iterator] = function* () {
+///   for (let i=0; i < this.length; i++) {
+///     yield this.item(i);
+///   }
+/// }
+///
+/// const list = new ThingList();
+/// list.push(new Thing());
+///
+/// for (let item of list) {
+///
+/// }
+/// ```
+///
+/// These collections are a workaround for wasm_bindgen not supporting returning
+/// `Vec<T>` to JS (see
+/// [issue](https://github.com/rustwasm/wasm-bindgen/issues/111)).
+macro_rules! make_item_list {
+    ($list_struct:ident, $item_struct:ident) => {
+        #[wasm_bindgen]
+        #[derive(Default)]
+        pub struct $list_struct {
+            items: Vec<$item_struct>,
+        }
+
+        #[wasm_bindgen]
+        impl $list_struct {
+            fn from_vec(items: Vec<$item_struct>) -> Self {
+                Self { items }
+            }
+
+            #[wasm_bindgen(constructor)]
+            pub fn new() -> Self {
+                Self { items: Vec::new() }
+            }
+
+            /// Add a new item to the end of the list.
+            pub fn push(&mut self, item: $item_struct) {
+                self.items.push(item.clone());
+            }
+
+            /// Return the item at a given index.
+            pub fn item(&self, index: usize) -> Option<$item_struct> {
+                self.items.get(index).cloned()
+            }
+
+            #[wasm_bindgen(getter)]
+            pub fn length(&self) -> usize {
+                self.items.len()
+            }
+        }
+    };
+}
+
+#[wasm_bindgen]
+#[derive(Clone)]
+pub struct TextWord {
+    rect: RotatedRect,
+    text: String,
+}
+
+#[wasm_bindgen]
+impl TextWord {
+    pub fn text(&self) -> String {
+        self.text.clone()
+    }
+
+    /// Return the oriented bounding rectangle containing the characters in
+    /// this word.
+    #[wasm_bindgen(js_name = rotatedRect)]
+    pub fn rotated_rect(&self) -> RotatedRect {
+        self.rect.clone()
+    }
+}
+
+make_item_list!(TextWordList, TextWord);
+
+#[wasm_bindgen]
+#[derive(Clone)]
+pub struct TextLine {
+    line: super::TextLine,
+}
+
+#[wasm_bindgen]
+impl TextLine {
+    pub fn text(&self) -> String {
+        self.line.to_string()
+    }
+
+    pub fn words(&self) -> TextWordList {
+        let items = self
+            .line
+            .words()
+            .map(|w| TextWord {
+                text: w.to_string(),
+                rect: RotatedRect {
+                    rect: w.rotated_rect(),
+                },
+            })
+            .collect();
+        TextWordList::from_vec(items)
+    }
+}
+
+make_item_list!(TextLineList, TextLine);
