@@ -1,23 +1,21 @@
 use std::collections::HashMap;
 use std::error::Error;
-use std::fmt;
-use std::fmt::Write;
 
 use rayon::prelude::*;
 
 use wasnn::ctc::{CtcDecoder, CtcHypothesis};
 use wasnn::ops::{pad, resize, CoordTransformMode, NearestMode, ResizeMode, ResizeTarget};
 use wasnn::{Dimension, Model, RunOptions};
-use wasnn_imageproc::{
-    bounding_rect, min_area_rect, BoundingRect, Point, Polygon, Rect, RotatedRect,
-};
+use wasnn_imageproc::{bounding_rect, BoundingRect, Point, Polygon, Rect, RotatedRect};
 use wasnn_tensor::{tensor, Tensor, TensorLayout, TensorView};
 
 mod log;
 pub mod page_layout;
+mod text_items;
 mod wasm_api;
 
 use page_layout::{find_connected_component_rects, find_text_lines, line_polygon};
+pub use text_items::{TextChar, TextItem, TextLine, TextWord};
 
 /// Return the smallest multiple of `factor` that is >= `val`.
 fn round_up<
@@ -285,76 +283,6 @@ fn prepare_text_line_batch(
     output
 }
 
-/// Details of a single character that was recognized.
-pub struct TextChar {
-    /// Character that was recognized.
-    pub char: char,
-
-    /// Approximate bounding rectangle of character in input image.
-    pub rect: Rect,
-}
-
-/// Result of recognizing a line of text.
-///
-/// This includes the sequence of characters that were found and associated
-/// metadata (eg. bounding boxes).
-pub struct TextLine {
-    chars: Vec<TextChar>,
-}
-
-/// Subsequence of a [TextLine] that contains a sequence of non-space characters.
-pub struct TextWord<'a> {
-    chars: &'a [TextChar],
-}
-
-impl<'a> TextWord<'a> {
-    fn new(chars: &'a [TextChar]) -> TextWord {
-        assert!(!chars.is_empty());
-        TextWord { chars }
-    }
-
-    /// Return the bounding rectangle of all characters in this word.
-    pub fn bounding_rect(&self) -> Rect {
-        bounding_rect(self.chars.iter().map(|c| &c.rect)).expect("expected non-empty word")
-    }
-
-    /// Return the oriented bounding rectangle of all characters in this word.
-    pub fn rotated_rect(&self) -> RotatedRect {
-        let points: Vec<_> = self.chars.iter().flat_map(|c| c.rect.corners()).collect();
-        min_area_rect(&points).expect("expected non-empty word")
-    }
-}
-
-impl TextLine {
-    /// Return the bounding rectangle of the line. This can be `None` if the
-    /// line is empty (ie. contains no characters).
-    pub fn bounding_rect(&self) -> Option<Rect> {
-        bounding_rect(self.chars.iter().map(|c| &c.rect))
-    }
-
-    /// Return the bounding rects of each character in the line.
-    pub fn chars(&self) -> &[TextChar] {
-        &self.chars
-    }
-
-    /// Return an iterator over words in this line.
-    pub fn words(&self) -> impl Iterator<Item = TextWord> {
-        self.chars()
-            .split(|c| c.char == ' ')
-            .filter(|chars| !chars.is_empty())
-            .map(TextWord::new)
-    }
-}
-
-impl fmt::Display for TextLine {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for c in self.chars.iter().map(|c| c.char) {
-            f.write_char(c)?;
-        }
-        Ok(())
-    }
-}
-
 /// Return the min and max Y coordinates along edges of `poly` which have a
 /// given X coordinate.
 fn min_max_ys_for_x(poly: Polygon<&[Point]>, x: i32) -> Option<[i32; 2]> {
@@ -401,7 +329,7 @@ fn recognize_text_lines(
     lines: &[Vec<RotatedRect>],
     model: &Model,
     debug: bool,
-) -> Result<Vec<TextLine>, Box<dyn Error>> {
+) -> Result<Vec<Option<TextLine>>, Box<dyn Error>> {
     let [_, img_height, img_width] = image.dims();
     let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
     let rec_input_id = model
@@ -546,7 +474,7 @@ fn recognize_text_lines(
 
     // Decode recognition results into sequences of characters with associated
     // metadata (eg. bounding boxes).
-    let text_lines: Vec<TextLine> = line_rec_results
+    let text_lines: Vec<Option<TextLine>> = line_rec_results
         .into_iter()
         .map(|result| {
             let line_rect = result.line.region.bounding_rect();
@@ -589,7 +517,12 @@ fn recognize_text_lines(
                     }
                 })
                 .collect();
-            TextLine { chars: text_line }
+
+            if text_line.is_empty() {
+                None
+            } else {
+                Some(TextLine::new(text_line))
+            }
         })
         .collect();
 
@@ -669,11 +602,14 @@ impl OcrEngine {
     ///
     /// `lines` is an ordered list of the text line boxes in an image,
     /// produced by [OcrEngine::find_text_lines].
+    ///
+    /// The output is a list of [TextLine]s corresponding to the input image
+    /// regions. Entries can be `None` if no text was found in a given line.
     pub fn recognize_text(
         &self,
         input: &OcrInput,
         lines: &[Vec<RotatedRect>],
-    ) -> Result<Vec<TextLine>, Box<dyn Error>> {
+    ) -> Result<Vec<Option<TextLine>>, Box<dyn Error>> {
         let Some(recognition_model) = self.params.recognition_model.as_ref() else {
             return Err("Recognition model not loaded".into());
         };
@@ -692,7 +628,7 @@ impl OcrEngine {
         let text = self
             .recognize_text(input, &line_rects)?
             .into_iter()
-            .map(|line| line.to_string())
+            .filter_map(|line| line.map(|l| l.to_string()))
             .collect::<Vec<_>>()
             .join("\n");
         Ok(text)

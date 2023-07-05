@@ -6,7 +6,7 @@ use std::io::BufWriter;
 use std::iter::zip;
 
 use wasnn_imageproc::{draw_polygon, Point};
-use wasnn_ocr::{OcrEngine, OcrEngineParams};
+use wasnn_ocr::{OcrEngine, OcrEngineParams, TextItem};
 use wasnn_tensor::{NdTensorViewMut, Tensor, TensorLayout, TensorView};
 
 mod models;
@@ -227,7 +227,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let word_rects = engine.detect_words(&ocr_input)?;
     let line_rects = engine.find_text_lines(&ocr_input, &word_rects);
     let line_texts = engine.recognize_text(&ocr_input, &line_rects)?;
-    for line in &line_texts {
+    for line in line_texts.iter().flatten() {
         println!("{}", line);
     }
 
@@ -244,7 +244,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut painter = Painter::new(annotated_img.nd_view_mut());
         let colors = [[0.9, 0., 0.], [0., 0.9, 0.], [0., 0., 0.9]];
 
-        for (line, color) in zip(line_texts.iter(), colors.into_iter().cycle()) {
+        for (line, color) in zip(line_texts.into_iter().flatten(), colors.into_iter().cycle()) {
             for text_word in line.words() {
                 painter.set_stroke(color);
                 painter.draw_polygon(&text_word.rotated_rect().corners());
