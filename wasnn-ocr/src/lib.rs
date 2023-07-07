@@ -314,6 +314,26 @@ fn char_rect(line_poly: Polygon<&[Point]>, min_x: i32, max_x: i32) -> Rect {
     )
 }
 
+/// Method used to decode sequence model outputs to a sequence of labels.
+///
+/// See [CtcDecoder] for more details.
+#[derive(Copy, Clone, Default)]
+pub enum DecodeMethod {
+    #[default]
+    Greedy,
+    BeamSearch {
+        width: u32,
+    },
+}
+
+#[derive(Clone, Default)]
+pub struct RecognitionOpt {
+    pub debug: bool,
+
+    /// Method used to decode character sequence outputs to character values.
+    pub decode_method: DecodeMethod,
+}
+
 /// Recognize text lines in an image.
 ///
 /// `image` is a CHW greyscale image with values in the range `ZERO_VALUE` to
@@ -328,8 +348,13 @@ fn recognize_text_lines(
     image: TensorView<f32>,
     lines: &[Vec<RotatedRect>],
     model: &Model,
-    debug: bool,
+    opts: RecognitionOpt,
 ) -> Result<Vec<Option<TextLine>>, Box<dyn Error>> {
+    let RecognitionOpt {
+        debug,
+        decode_method,
+    } = opts;
+
     let [_, img_height, img_width] = image.dims();
     let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
     let rec_input_id = model
@@ -458,7 +483,12 @@ fn recognize_text_lines(
                 .map(|(group_line_index, line)| {
                     let decoder = CtcDecoder::new();
                     let input_seq = rec_sequence.slice([group_line_index]);
-                    let ctc_output = decoder.decode_greedy(input_seq.clone());
+                    let ctc_output = match decode_method {
+                        DecodeMethod::Greedy => decoder.decode_greedy(input_seq.clone()),
+                        DecodeMethod::BeamSearch { width } => {
+                            decoder.decode_beam(input_seq.clone(), width)
+                        }
+                    };
                     LineRecResult {
                         line,
                         rec_input_len: group_width as usize,
@@ -540,6 +570,8 @@ pub struct OcrEngineParams {
 
     /// Enable debug logging.
     pub debug: bool,
+
+    pub decode_method: DecodeMethod,
 }
 
 /// Detects and recognizes text in images.
@@ -617,7 +649,10 @@ impl OcrEngine {
             input.image.view(),
             lines,
             recognition_model,
-            self.params.debug,
+            RecognitionOpt {
+                debug: self.params.debug,
+                decode_method: self.params.decode_method,
+            },
         )
     }
 

@@ -63,7 +63,7 @@ impl OcrEngine {
         let engine = BaseOcrEngine::new(OcrEngineParams {
             detection_model,
             recognition_model,
-            debug: false,
+            ..Default::default()
         });
         Ok(OcrEngine { engine })
     }

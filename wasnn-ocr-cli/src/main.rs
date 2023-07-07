@@ -6,7 +6,7 @@ use std::io::BufWriter;
 use std::iter::zip;
 
 use wasnn_imageproc::{draw_polygon, Point};
-use wasnn_ocr::{OcrEngine, OcrEngineParams, TextItem};
+use wasnn_ocr::{DecodeMethod, OcrEngine, OcrEngineParams, TextItem};
 use wasnn_tensor::{NdTensorViewMut, Tensor, TensorLayout, TensorView};
 
 mod models;
@@ -82,12 +82,16 @@ struct Args {
 
     /// Enable debug output.
     debug: bool,
+
+    /// Use beam search for sequence decoding.
+    beam_search: bool,
 }
 
 fn parse_args() -> Result<Args, lexopt::Error> {
     use lexopt::prelude::*;
 
     let mut values = VecDeque::new();
+    let mut beam_search = false;
     let mut debug = false;
     let mut detection_model = None;
     let mut recognition_model = None;
@@ -96,6 +100,9 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     while let Some(arg) = parser.next()? {
         match arg {
             Value(val) => values.push_back(val.string()?),
+            Long("beam") => {
+                beam_search = true;
+            }
             Long("debug") => {
                 debug = true;
             }
@@ -112,6 +119,10 @@ fn parse_args() -> Result<Args, lexopt::Error> {
 Usage: {bin_name} [OPTIONS] <image>
 
 Options:
+
+  --beam
+
+    Use beam search for decoding.
 
   --debug
 
@@ -134,10 +145,11 @@ Options:
     }
 
     Ok(Args {
-        detection_model,
-        recognition_model,
-        image: values.pop_front().ok_or("missing `<image>` arg")?,
+        beam_search,
         debug,
+        detection_model,
+        image: values.pop_front().ok_or("missing `<image>` arg")?,
+        recognition_model,
     })
 }
 
@@ -221,6 +233,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         detection_model: Some(detection_model),
         recognition_model: Some(recognition_model),
         debug: args.debug,
+        decode_method: if args.beam_search {
+            DecodeMethod::BeamSearch { width: 100 }
+        } else {
+            DecodeMethod::Greedy
+        },
     });
 
     let ocr_input = engine.prepare_input(color_img.view())?;
