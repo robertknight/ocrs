@@ -98,3 +98,73 @@ impl<'a> fmt::Display for TextWord<'a> {
         fmt_text_item(self, f)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use wasnn_imageproc::{Point, Rect};
+
+    use super::{TextChar, TextItem, TextLine, TextWord};
+
+    fn gen_text_chars(text: &str, width: i32) -> Vec<TextChar> {
+        text.chars()
+            .enumerate()
+            .map(|(i, char)| TextChar {
+                char,
+                rect: Rect::from_tlhw(0, i as i32 * width, 25, width),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_item_display() {
+        let chars = gen_text_chars("foo bar baz", 10 /* char_width */);
+        let line = TextLine::new(chars);
+        assert_eq!(line.to_string(), "foo bar baz");
+    }
+
+    #[test]
+    fn test_item_rotated_rect() {
+        // Horizontal word case. The rotated rect and bounding rect are the same.
+        let char_width = 10;
+        let chars = gen_text_chars("foo", char_width);
+        let word = TextWord::new(&chars);
+
+        assert_eq!(
+            word.bounding_rect(),
+            Rect::from_tlhw(0, 0, 25, char_width * 3)
+        );
+        assert_eq!(
+            word.rotated_rect().corners(),
+            [(25, 0), (0, 0), (0, 30), (25, 30)].map(|(y, x)| Point { x, y })
+        );
+
+        // TODO - Add cases for non-horizontal words.
+    }
+
+    #[test]
+    fn test_line_words() {
+        let char_width = 10;
+        let chars = gen_text_chars("foo bar  baz ", char_width);
+        let line = TextLine::new(chars);
+        let words: Vec<_> = line.words().collect();
+
+        assert_eq!(words.len(), 3);
+        assert_eq!(words[0].to_string(), "foo");
+        assert_eq!(
+            words[0].bounding_rect(),
+            Rect::from_tlhw(0, 0, 25, char_width * 3)
+        );
+
+        assert_eq!(words[1].to_string(), "bar");
+        assert_eq!(
+            words[1].bounding_rect(),
+            Rect::from_tlhw(0, char_width * 4, 25, char_width * 3)
+        );
+
+        assert_eq!(words[2].to_string(), "baz");
+        assert_eq!(
+            words[2].bounding_rect(),
+            Rect::from_tlhw(0, char_width * 9, 25, char_width * 3)
+        );
+    }
+}
