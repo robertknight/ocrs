@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::*;
 
 use wasnn::Model;
 use wasnn_imageproc::BoundingRect;
-use wasnn_tensor::{TensorLayout, TensorView};
+use wasnn_tensor::{NdTensorLayout, NdTensorView};
 
 use crate::{OcrEngine as BaseOcrEngine, OcrEngineParams, OcrInput, TextItem};
 
@@ -80,12 +80,13 @@ impl OcrEngine {
         let pixels_per_chan = height * width;
         let channels = data.len() / pixels_per_chan;
 
-        if data.len() % pixels_per_chan != 0 || ![1, 3, 4].contains(&channels) {
-            return Err("Expected image data length to be 1, 3 or 4x width * height".to_string());
+        if ![1, 3, 4].contains(&channels) {
+            return Err("expected channel count to be 1, 3 or 4".to_string());
         }
 
-        let tensor = TensorView::from_data(&[height, width, channels], data)
-            .permuted(&[2, 0, 1]) // HWC => CHW
+        let tensor = NdTensorView::from_data(data, [height, width, channels], None)
+            .map_err(|_| "incorrect data length for image size and channel count".to_string())?
+            .permuted([2, 0, 1]) // HWC => CHW
             .map(|x| (*x as f32) / 255.);
         self.engine
             .prepare_input(tensor.view())
@@ -155,7 +156,7 @@ impl Image {
         self.input
             .image
             .view()
-            .permuted(&[1, 2, 0])
+            .permuted([1, 2, 0])
             .iter()
             .map(|x| ((x + 0.5) * 255.) as u8)
             .collect()

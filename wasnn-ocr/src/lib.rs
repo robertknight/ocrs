@@ -7,7 +7,9 @@ use wasnn::ctc::{CtcDecoder, CtcHypothesis};
 use wasnn::ops::{pad, resize, CoordTransformMode, NearestMode, ResizeMode, ResizeTarget};
 use wasnn::{Dimension, Model, RunOptions};
 use wasnn_imageproc::{bounding_rect, BoundingRect, Point, Polygon, Rect, RotatedRect};
-use wasnn_tensor::{tensor, Tensor, TensorLayout, TensorView};
+use wasnn_tensor::{
+    tensor, NdTensor, NdTensorLayout, NdTensorView, Tensor, TensorLayout, TensorView,
+};
 
 mod log;
 pub mod page_layout;
@@ -47,14 +49,17 @@ pub const BLACK_VALUE: f32 = -0.5;
 ///
 /// `normalize_pixel` is a function applied to each greyscale pixel value before
 /// it is written into the output tensor.
-fn greyscale_image<F: Fn(f32) -> f32>(img: TensorView<f32>, normalize_pixel: F) -> Tensor<f32> {
-    let [chans, height, width]: [usize; 3] = img.shape().try_into().expect("expected 3 dim input");
+fn greyscale_image<F: Fn(f32) -> f32>(
+    img: NdTensorView<f32, 3>,
+    normalize_pixel: F,
+) -> NdTensor<f32, 3> {
+    let [chans, height, width] = img.shape();
     assert!(
         chans == 1 || chans == 3 || chans == 4,
         "expected greyscale, RGB or RGBA input image"
     );
 
-    let mut output = Tensor::zeros(&[1, height, width]);
+    let mut output = NdTensor::zeros([1, height, width]);
 
     let used_chans = chans.min(3); // For RGBA images, only RGB channels are used
     let chan_weights: &[f32] = if chans == 1 {
@@ -65,8 +70,7 @@ fn greyscale_image<F: Fn(f32) -> f32>(img: TensorView<f32>, normalize_pixel: F) 
         &[0.299, 0.587, 0.114]
     };
 
-    let img = img.nd_view();
-    let mut out_lum_chan = output.nd_slice_mut([0]);
+    let mut out_lum_chan = output.slice_mut([0]);
 
     for y in 0..height {
         for x in 0..width {
@@ -84,7 +88,7 @@ fn greyscale_image<F: Fn(f32) -> f32>(img: TensorView<f32>, normalize_pixel: F) 
 ///
 /// This converts an input CHW image with values in the range 0-1 to a greyscale
 /// image with values in the range `ZERO_VALUE` to `ZERO_VALUE + 1`.
-fn prepare_image(image: TensorView<f32>) -> Tensor<f32> {
+fn prepare_image(image: NdTensorView<f32, 3>) -> NdTensor<f32, 3> {
     greyscale_image(image, |pixel| pixel + BLACK_VALUE)
 }
 
@@ -99,7 +103,7 @@ fn prepare_image(image: TensorView<f32>) -> Tensor<f32> {
 /// The result is an unsorted list of the oriented bounding rectangles of
 /// connected components (ie. text words) in the mask.
 fn detect_words(
-    mut image: TensorView<f32>,
+    image: NdTensorView<f32, 3>,
     model: &Model,
     debug: bool,
 ) -> Result<Vec<RotatedRect>, Box<dyn Error>> {
@@ -118,8 +122,10 @@ fn detect_words(
         .copied()
         .expect("model has no outputs");
 
-    let [_, img_height, img_width] = image.dims();
-    image.insert_dim(0); // Add batch dimension
+    let [img_chans, img_height, img_width] = image.shape();
+
+    // Add batch dim
+    let image = image.reshaped([1, img_chans, img_height, img_width]);
 
     let bilinear_resize = |img: TensorView, height, width| {
         resize(
@@ -151,12 +157,12 @@ fn detect_words(
     let pad_right = (in_width as i32 - img_width as i32).max(0);
     let grey_img = if pad_bottom > 0 || pad_right > 0 {
         pad(
-            image.view(),
+            image.view().as_dyn(),
             &tensor!([0, 0, 0, 0, 0, 0, pad_bottom, pad_right]),
             BLACK_VALUE,
         )?
     } else {
-        image.to_tensor()
+        image.as_dyn().to_tensor()
     };
 
     // Resize images to the text detection model's input size.
@@ -226,7 +232,7 @@ struct TextRecLine {
 /// output tensor. Lines in the batch can have different widths, so the output
 /// is padded on the right side to a common width of `output_width`.
 fn prepare_text_line_batch(
-    image: &TensorView<f32>,
+    image: &NdTensorView<f32, 3>,
     lines: &[TextRecLine],
     page_rect: Rect,
     output_height: usize,
@@ -240,7 +246,7 @@ fn prepare_text_line_batch(
     let page_index_rect = page_rect.adjust_tlbr(0, 0, -1, -1);
 
     for (group_line_index, line) in lines.iter().enumerate() {
-        let grey_chan = image.nd_slice([0]);
+        let grey_chan = image.slice([0]);
 
         let line_rect = line.region.bounding_rect();
         let mut line_img = Tensor::zeros(&[
@@ -345,7 +351,7 @@ pub struct RecognitionOpt {
 ///
 /// Entries in the result can be `None` if no text was found in a line.
 fn recognize_text_lines(
-    image: TensorView<f32>,
+    image: NdTensorView<f32, 3>,
     lines: &[Vec<RotatedRect>],
     model: &Model,
     opts: RecognitionOpt,
@@ -355,7 +361,7 @@ fn recognize_text_lines(
         decode_method,
     } = opts;
 
-    let [_, img_height, img_width] = image.dims();
+    let [_, img_height, img_width] = image.shape();
     let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
     let rec_input_id = model
         .input_ids()
@@ -586,7 +592,7 @@ pub struct OcrEngine {
 /// [OcrEngine::prepare_input]
 pub struct OcrInput {
     /// CHW tensor with normalized pixel values in [BLACK_VALUE, BLACK_VALUE + 1.].
-    pub(crate) image: Tensor<f32>,
+    pub(crate) image: NdTensor<f32, 3>,
 }
 
 impl OcrEngine {
@@ -599,7 +605,7 @@ impl OcrEngine {
     ///
     /// The input `image` should be a CHW tensor with values in the range 0-1
     /// and either 1 (grey), 3 (RGB) or 4 (RGBA) channels.
-    pub fn prepare_input(&self, image: TensorView<f32>) -> Result<OcrInput, Box<dyn Error>> {
+    pub fn prepare_input(&self, image: NdTensorView<f32, 3>) -> Result<OcrInput, Box<dyn Error>> {
         Ok(OcrInput {
             image: prepare_image(image),
         })
@@ -628,7 +634,7 @@ impl OcrEngine {
         input: &OcrInput,
         words: &[RotatedRect],
     ) -> Vec<Vec<RotatedRect>> {
-        let [_, img_height, img_width] = input.image.dims();
+        let [_, img_height, img_width] = input.image.shape();
         let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
         find_text_lines(words, page_rect)
     }
@@ -681,7 +687,7 @@ mod tests {
     use wasnn::Model;
     use wasnn::{Dimension, ModelBuilder, OpType};
     use wasnn_imageproc::{fill_rect, BoundingRect, Rect, RotatedRect};
-    use wasnn_tensor::{Tensor, TensorLayout};
+    use wasnn_tensor::{NdTensor, NdTensorLayout, Tensor};
 
     use super::{OcrEngine, OcrEngineParams};
 
@@ -689,13 +695,13 @@ mod tests {
     ///
     /// The result is an RGB image which is black except for one line containing
     /// `n_words` white-filled rects.
-    fn gen_test_image(n_words: usize) -> Tensor<f32> {
-        let mut image = Tensor::zeros(&[3, 100, 200]);
+    fn gen_test_image(n_words: usize) -> NdTensor<f32, 3> {
+        let mut image = NdTensor::zeros([3, 100, 200]);
 
         for word_idx in 0..n_words {
             for chan_idx in 0..3 {
                 fill_rect(
-                    image.nd_slice_mut([chan_idx]),
+                    image.slice_mut([chan_idx]),
                     Rect::from_tlhw(30, (word_idx * 70) as i32, 20, 50),
                     1.,
                 );
@@ -828,9 +834,7 @@ mod tests {
         });
         let input = engine.prepare_input(image.view())?;
 
-        assert_eq!(input.image.ndim(), 3);
-
-        let [chans, height, width] = input.image.dims();
+        let [chans, height, width] = input.image.shape();
         assert_eq!(chans, 1);
         assert_eq!(width, image.size(2));
         assert_eq!(height, image.size(1));

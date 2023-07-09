@@ -7,22 +7,22 @@ use std::iter::zip;
 
 use wasnn_imageproc::{draw_polygon, Point};
 use wasnn_ocr::{DecodeMethod, OcrEngine, OcrEngineParams, TextItem};
-use wasnn_tensor::{NdTensorViewMut, Tensor, TensorLayout, TensorView};
+use wasnn_tensor::{NdTensor, NdTensorLayout, NdTensorView, NdTensorViewMut};
 
 mod models;
 use models::{load_model, ModelSource};
 
 /// Read an image from `path` into a CHW tensor.
-fn read_image(path: &str) -> Result<Tensor<f32>, Box<dyn Error>> {
+fn read_image(path: &str) -> Result<NdTensor<f32, 3>, Box<dyn Error>> {
     let input_img = image::open(path)?;
     let input_img = input_img.into_rgb8();
 
     let (width, height) = input_img.dimensions();
 
     let in_chans = 3;
-    let mut float_img = Tensor::zeros(&[in_chans, height as usize, width as usize]);
+    let mut float_img = NdTensor::zeros([in_chans, height as usize, width as usize]);
     for c in 0..in_chans {
-        let mut chan_img = float_img.nd_slice_mut([c]);
+        let mut chan_img = float_img.slice_mut([c]);
         for y in 0..height {
             for x in 0..width {
                 chan_img[[y as usize, x as usize]] = input_img.get_pixel(x, y)[c] as f32 / 255.0
@@ -33,22 +33,17 @@ fn read_image(path: &str) -> Result<Tensor<f32>, Box<dyn Error>> {
 }
 
 /// Write a CHW image to a PNG file in `path`.
-fn write_image(path: &str, img: TensorView<f32>) -> Result<(), Box<dyn Error>> {
-    if img.ndim() != 3 {
-        return Err("Expected CHW input".into());
-    }
-
-    let img_width = img.size(img.ndim() - 1);
-    let img_height = img.size(img.ndim() - 2);
-    let color_type = match img.size(img.ndim() - 3) {
+fn write_image(path: &str, img: NdTensorView<f32, 3>) -> Result<(), Box<dyn Error>> {
+    let img_width = img.size(2);
+    let img_height = img.size(1);
+    let color_type = match img.size(0) {
         1 => png::ColorType::Grayscale,
         3 => png::ColorType::Rgb,
         4 => png::ColorType::Rgba,
         _ => return Err("Unsupported channel count".into()),
     };
 
-    let mut hwc_img = img.to_owned();
-    hwc_img.permute(&[1, 2, 0]); // CHW => HWC
+    let hwc_img = img.permuted([1, 2, 0]); // CHW => HWC
 
     let out_img = image_from_tensor(hwc_img);
     let file = fs::File::create(path)?;
@@ -61,9 +56,9 @@ fn write_image(path: &str, img: TensorView<f32>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Convert an NCHW float tensor with values in the range [0, 1] to Vec<u8>
+/// Convert an CHW float tensor with values in the range [0, 1] to Vec<u8>
 /// with values scaled to [0, 255].
-fn image_from_tensor(tensor: TensorView<f32>) -> Vec<u8> {
+fn image_from_tensor(tensor: NdTensorView<f32, 3>) -> Vec<u8> {
     tensor
         .iter()
         .map(|x| (x.clamp(0., 1.) * 255.0) as u8)
@@ -258,7 +253,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
 
         let mut annotated_img = color_img;
-        let mut painter = Painter::new(annotated_img.nd_view_mut());
+        let mut painter = Painter::new(annotated_img.view_mut());
         let colors = [[0.9, 0., 0.], [0., 0.9, 0.], [0., 0., 0.9]];
 
         for (line, color) in zip(line_texts.into_iter().flatten(), colors.into_iter().cycle()) {
