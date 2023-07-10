@@ -156,11 +156,8 @@ fn detect_words(
     let pad_bottom = (in_height as i32 - img_height as i32).max(0);
     let pad_right = (in_width as i32 - img_width as i32).max(0);
     let grey_img = if pad_bottom > 0 || pad_right > 0 {
-        pad(
-            image.view().as_dyn(),
-            &tensor!([0, 0, 0, 0, 0, 0, pad_bottom, pad_right]),
-            BLACK_VALUE,
-        )?
+        let pads = &[0, 0, 0, 0, 0, 0, pad_bottom, pad_right];
+        pad(image.view().as_dyn(), &pads.into(), BLACK_VALUE)?
     } else {
         image.as_dyn().to_tensor()
     };
