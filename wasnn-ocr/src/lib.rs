@@ -7,9 +7,7 @@ use wasnn::ctc::{CtcDecoder, CtcHypothesis};
 use wasnn::ops::{pad, resize, CoordTransformMode, NearestMode, ResizeMode, ResizeTarget};
 use wasnn::{Dimension, Model, RunOptions};
 use wasnn_imageproc::{bounding_rect, BoundingRect, Point, Polygon, Rect, RotatedRect};
-use wasnn_tensor::{
-    tensor, NdTensor, NdTensorLayout, NdTensorView, Tensor, TensorLayout, TensorView,
-};
+use wasnn_tensor::{NdTensor, NdTensorLayout, NdTensorView, Tensor, TensorLayout, TensorView};
 
 mod log;
 pub mod page_layout;
@@ -128,9 +126,10 @@ fn detect_words(
     let image = image.reshaped([1, img_chans, img_height, img_width]);
 
     let bilinear_resize = |img: TensorView, height, width| {
+        let sizes = &[1, 1, height, width];
         resize(
             img,
-            ResizeTarget::Sizes(&tensor!([1, 1, height, width])),
+            ResizeTarget::Sizes(sizes.into()),
             ResizeMode::Linear,
             CoordTransformMode::default(),
             NearestMode::default(),
@@ -264,14 +263,10 @@ fn prepare_text_line_batch(
                 grey_chan[[in_p.y as usize, in_p.x as usize]];
         }
 
+        let resized_shape = &[1, 1, output_height as i32, line.resized_width as i32];
         let resized_line_img = resize(
             line_img.view(),
-            ResizeTarget::Sizes(&tensor!([
-                1,
-                1,
-                output_height as i32,
-                line.resized_width as i32
-            ])),
+            ResizeTarget::Sizes(resized_shape.into()),
             ResizeMode::Linear,
             CoordTransformMode::default(),
             NearestMode::default(),
