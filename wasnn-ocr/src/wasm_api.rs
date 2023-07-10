@@ -84,7 +84,7 @@ impl OcrEngine {
             return Err("expected channel count to be 1, 3 or 4".to_string());
         }
 
-        let tensor = NdTensorView::from_data(data, [height, width, channels], None)
+        let tensor = NdTensorView::from_slice(data, [height, width, channels], None)
             .map_err(|_| "incorrect data length for image size and channel count".to_string())?
             .permuted([2, 0, 1]) // HWC => CHW
             .map(|x| (*x as f32) / 255.);
