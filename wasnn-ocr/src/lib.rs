@@ -480,12 +480,10 @@ fn recognize_text_lines(
                 .enumerate()
                 .map(|(group_line_index, line)| {
                     let decoder = CtcDecoder::new();
-                    let input_seq = rec_sequence.slice([group_line_index]);
+                    let input_seq = rec_sequence.nd_slice([group_line_index]);
                     let ctc_output = match decode_method {
-                        DecodeMethod::Greedy => decoder.decode_greedy(input_seq.clone()),
-                        DecodeMethod::BeamSearch { width } => {
-                            decoder.decode_beam(input_seq.clone(), width)
-                        }
+                        DecodeMethod::Greedy => decoder.decode_greedy(input_seq),
+                        DecodeMethod::BeamSearch { width } => decoder.decode_beam(input_seq, width),
                     };
                     LineRecResult {
                         line,
