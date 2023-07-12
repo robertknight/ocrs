@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::*;
 
 use wasnn::Model;
 use wasnn_imageproc::BoundingRect;
-use wasnn_tensor::{NdTensorLayout, NdTensorView};
+use wasnn_tensor::{Layout, NdTensorView};
 
 use crate::{OcrEngine as BaseOcrEngine, OcrEngineParams, OcrInput, TextItem};
 

@@ -7,7 +7,7 @@ use wasnn::ctc::{CtcDecoder, CtcHypothesis};
 use wasnn::ops::{pad, resize, CoordTransformMode, NearestMode, ResizeMode, ResizeTarget};
 use wasnn::{Dimension, Model, RunOptions};
 use wasnn_imageproc::{bounding_rect, BoundingRect, Point, Polygon, Rect, RotatedRect};
-use wasnn_tensor::{NdTensor, NdTensorLayout, NdTensorView, Tensor, TensorLayout, TensorView};
+use wasnn_tensor::{Layout, NdTensor, NdTensorView, Tensor, TensorLayout, TensorView};
 
 mod log;
 pub mod page_layout;
@@ -677,7 +677,7 @@ mod tests {
     use wasnn::Model;
     use wasnn::{Dimension, ModelBuilder, OpType};
     use wasnn_imageproc::{fill_rect, BoundingRect, Rect, RotatedRect};
-    use wasnn_tensor::{NdTensor, NdTensorLayout, Tensor};
+    use wasnn_tensor::{Layout, NdTensor, Tensor};
 
     use super::{OcrEngine, OcrEngineParams};
 

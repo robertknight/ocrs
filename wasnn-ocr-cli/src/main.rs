@@ -7,7 +7,7 @@ use std::iter::zip;
 
 use wasnn_imageproc::{draw_polygon, Point};
 use wasnn_ocr::{DecodeMethod, OcrEngine, OcrEngineParams, TextItem};
-use wasnn_tensor::{NdTensor, NdTensorLayout, NdTensorView, NdTensorViewMut};
+use wasnn_tensor::{Layout, NdTensor, NdTensorView, NdTensorViewMut};
 
 mod models;
 use models::{load_model, ModelSource};
