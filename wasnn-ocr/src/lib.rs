@@ -7,7 +7,7 @@ use wasnn::ctc::{CtcDecoder, CtcHypothesis};
 use wasnn::ops::{pad, resize, CoordTransformMode, NearestMode, ResizeMode, ResizeTarget};
 use wasnn::{Dimension, Model, RunOptions};
 use wasnn_imageproc::{bounding_rect, BoundingRect, Point, Polygon, Rect, RotatedRect};
-use wasnn_tensor::{Layout, NdTensor, NdTensorView, Tensor, TensorLayout, TensorView};
+use wasnn_tensor::{Layout, NdTensor, NdTensorView, Tensor, TensorView};
 
 mod log;
 pub mod page_layout;
