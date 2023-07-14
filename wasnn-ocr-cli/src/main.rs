@@ -161,13 +161,15 @@ impl<T, E: std::fmt::Display> FileErrorContext<T> for Result<T, E> {
     }
 }
 
+type Rgb<T = u8> = [T; 3];
+
 /// Utility for drawing into an image tensor.
 struct Painter<'a, T> {
     /// CHW image tensor.
     surface: NdTensorViewMut<'a, T, 3>,
 
     /// Stroke color for RGB channels.
-    stroke: [T; 3],
+    stroke: Rgb<T>,
 }
 
 impl<'a, T: Copy + Default> Painter<'a, T> {
@@ -180,7 +182,7 @@ impl<'a, T: Copy + Default> Painter<'a, T> {
     }
 
     /// Set the RGB color values used by the `draw_*` methods.
-    fn set_stroke(&mut self, stroke: [T; 3]) {
+    fn set_stroke(&mut self, stroke: Rgb<T>) {
         self.stroke = stroke;
     }
 
@@ -254,11 +256,39 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         let mut annotated_img = color_img;
         let mut painter = Painter::new(annotated_img.view_mut());
-        let colors = [[0.9, 0., 0.], [0., 0.9, 0.], [0., 0., 0.9]];
 
-        for (line, color) in zip(line_texts.into_iter().flatten(), colors.into_iter().cycle()) {
+        // Colors chosen from https://www.w3.org/wiki/CSS/Properties/color/keywords.
+        //
+        // Light colors for text detection outputs, darker colors for
+        // corresponding text recognition outputs.
+        const CORAL: Rgb = [255, 127, 80];
+        const DARKSEAGREEN: Rgb = [143, 188, 143];
+        const CORNFLOWERBLUE: Rgb = [100, 149, 237];
+
+        const CRIMSON: Rgb = [220, 20, 60];
+        const DARKGREEN: Rgb = [0, 100, 0];
+        const DARKBLUE: Rgb = [0, 0, 139];
+
+        // Draw word bounding boxes from text detection step, grouped by line.
+        let colors = [CORAL, DARKSEAGREEN, CORNFLOWERBLUE];
+        for (line, color) in zip(line_rects.iter(), colors.into_iter().cycle()) {
+            for word_rect in line {
+                painter.set_stroke(color.map(|c| c as f32 / 255.));
+                painter.draw_polygon(&word_rect.corners());
+            }
+        }
+
+        // Draw word bounding boxes from text recognition step. These may
+        // be different as they are computed from the bounding boxes of
+        // recognized characters.
+        let colors = [CRIMSON, DARKGREEN, DARKBLUE];
+        for (line, color) in zip(line_texts.into_iter(), colors.into_iter().cycle()) {
+            let Some(line) = line else {
+                // Skip lines where recognition produced no output.
+                continue;
+            };
             for text_word in line.words() {
-                painter.set_stroke(color);
+                painter.set_stroke(color.map(|c| c as f32 / 255.));
                 painter.draw_polygon(&text_word.rotated_rect().corners());
             }
         }
