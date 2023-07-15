@@ -328,6 +328,89 @@ pub struct RecognitionOpt {
     pub decode_method: DecodeMethod,
 }
 
+/// Input and output from recognition for a single text line.
+struct LineRecResult {
+    /// Input to the recognition model.
+    line: TextRecLine,
+
+    /// Length of input sequences to recognition model, padded so that all
+    /// lines in batch have the same length.
+    rec_input_len: usize,
+
+    /// Length of output sequences from recognition model, used as input to
+    /// CTC decoding.
+    ctc_input_len: usize,
+
+    /// Output label sequence produced by CTC decoding.
+    ctc_output: CtcHypothesis,
+}
+
+/// Combine information from the input and output of text line recognition
+/// to produce [TextLine]s containing character sequences and bounding boxes
+/// for each line.
+///
+/// Entries in the result may be `None` if no text was recognized for a line.
+fn text_lines_from_recognition_results(results: &[LineRecResult]) -> Vec<Option<TextLine>> {
+    results
+        .iter()
+        .map(|result| {
+            let line_rect = result.line.region.bounding_rect();
+            let x_scale_factor = (line_rect.width() as f32) / (result.line.resized_width as f32);
+
+            // Calculate how much the recognition model downscales the image
+            // width. We assume this will be an integer factor, or close to it
+            // if the input width is not an exact multiple of the downscaling
+            // factor.
+            let downsample_factor =
+                (result.rec_input_len as f32 / result.ctc_input_len as f32).round() as u32;
+
+            let steps = result.ctc_output.steps();
+            let text_line: Vec<TextChar> = steps
+                .iter()
+                .enumerate()
+                .map(|(i, step)| {
+                    // X coord range of character in line recognition input image.
+                    let start_x = step.pos * downsample_factor;
+                    let end_x = if let Some(next_step) = steps.get(i + 1) {
+                        next_step.pos * downsample_factor
+                    } else {
+                        result.line.resized_width
+                    };
+
+                    // Map X coords to those of the input image.
+                    let [start_x, end_x] = [start_x, end_x]
+                        .map(|x| line_rect.left() + (x as f32 * x_scale_factor) as i32);
+
+                    // Since the recognition input is padded, it is possible we
+                    // get predicted positions that correspond to the padding
+                    // region, and thus are outside the bounds of the original
+                    // line. Clamp the X coordinates to ensure they are in-bounds
+                    // for the line.
+                    let start_x = start_x.clamp(line_rect.left(), line_rect.right());
+                    let end_x = end_x.clamp(line_rect.left(), line_rect.right());
+
+                    let char = DEFAULT_ALPHABET
+                        .chars()
+                        .nth((step.label - 1) as usize)
+                        .unwrap_or('?');
+
+                    TextChar {
+                        char,
+                        rect: char_rect(result.line.region.borrow(), start_x, end_x)
+                            .expect("invalid X coords"),
+                    }
+                })
+                .collect();
+
+            if text_line.is_empty() {
+                None
+            } else {
+                Some(TextLine::new(text_line))
+            }
+        })
+        .collect()
+}
+
 /// Recognize text lines in an image.
 ///
 /// `image` is a CHW greyscale image with values in the range `ZERO_VALUE` to
@@ -407,8 +490,8 @@ fn recognize_text_lines(
             });
     }
 
-    // Split large line groups up to better exploit parallelism in the loop
-    // below.
+    // Split large line groups up into smaller batches that can be processed
+    // in parallel.
     let max_lines_per_group = 20;
     let line_groups: Vec<(i32, Vec<TextRecLine>)> = line_groups
         .into_iter()
@@ -419,22 +502,6 @@ fn recognize_text_lines(
                 .collect::<Vec<_>>()
         })
         .collect();
-
-    struct LineRecResult {
-        /// Input line that was recognized.
-        line: TextRecLine,
-
-        /// Length of input sequences to recognition model, padded so that all
-        /// lines in batch have the same length.
-        rec_input_len: usize,
-
-        /// Length of output sequences from recognition model, used as input to
-        /// CTC decoding.
-        ctc_input_len: usize,
-
-        /// Output label sequence produced by CTC decoding.
-        ctc_output: CtcHypothesis,
-    }
 
     // Run text recognition on batches of lines.
     let mut line_rec_results: Vec<LineRecResult> = line_groups
@@ -492,68 +559,11 @@ fn recognize_text_lines(
         })
         .collect();
 
+    // The recognition outputs are in a different order than the inputs due to
+    // batching and parallel processing. Re-sort them into input order.
     line_rec_results.sort_by_key(|result| result.line.index);
 
-    // Decode recognition results into sequences of characters with associated
-    // metadata (eg. bounding boxes).
-    let text_lines: Vec<Option<TextLine>> = line_rec_results
-        .into_iter()
-        .map(|result| {
-            let line_rect = result.line.region.bounding_rect();
-            let x_scale_factor = (line_rect.width() as f32) / (result.line.resized_width as f32);
-
-            // Calculate how much the recognition model downscales the image
-            // width. We assume this will be an integer factor, or close to it
-            // if the input width is not an exact multiple of the downscaling
-            // factor.
-            let downsample_factor =
-                (result.rec_input_len as f32 / result.ctc_input_len as f32).round() as u32;
-
-            let steps = result.ctc_output.steps();
-            let text_line: Vec<TextChar> = steps
-                .iter()
-                .enumerate()
-                .map(|(i, step)| {
-                    // X coord range of character in line recognition input image.
-                    let start_x = step.pos * downsample_factor;
-                    let end_x = if let Some(next_step) = steps.get(i + 1) {
-                        next_step.pos * downsample_factor
-                    } else {
-                        result.line.resized_width
-                    };
-
-                    // Map X coords to those of the input image.
-                    let [start_x, end_x] = [start_x, end_x]
-                        .map(|x| line_rect.left() + (x as f32 * x_scale_factor) as i32);
-
-                    // Since the recognition input is padded, it is possible we
-                    // get predicted positions that correspond to the padding
-                    // region, and thus are outside the bounds of the original
-                    // line. Clamp the X coordinates to ensure they are in-bounds
-                    // for the line.
-                    let start_x = start_x.clamp(line_rect.left(), line_rect.right());
-                    let end_x = end_x.clamp(line_rect.left(), line_rect.right());
-
-                    let char = DEFAULT_ALPHABET
-                        .chars()
-                        .nth((step.label - 1) as usize)
-                        .unwrap_or('?');
-
-                    TextChar {
-                        char,
-                        rect: char_rect(result.line.region.borrow(), start_x, end_x)
-                            .expect("invalid X coords"),
-                    }
-                })
-                .collect();
-
-            if text_line.is_empty() {
-                None
-            } else {
-                Some(TextLine::new(text_line))
-            }
-        })
-        .collect();
+    let text_lines = text_lines_from_recognition_results(&line_rec_results);
 
     Ok(text_lines)
 }
