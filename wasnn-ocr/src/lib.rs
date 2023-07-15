@@ -6,7 +6,7 @@ use rayon::prelude::*;
 use wasnn::ctc::{CtcDecoder, CtcHypothesis};
 use wasnn::ops::{pad, resize, CoordTransformMode, NearestMode, ResizeMode, ResizeTarget};
 use wasnn::{Dimension, Model, RunOptions};
-use wasnn_imageproc::{bounding_rect, BoundingRect, Point, Polygon, Rect, RotatedRect};
+use wasnn_imageproc::{bounding_rect, BoundingRect, Line, Point, Polygon, Rect, RotatedRect};
 use wasnn_tensor::{Layout, NdTensor, NdTensorView, Tensor, TensorView};
 
 mod log;
@@ -286,31 +286,35 @@ fn prepare_text_line_batch(
     output
 }
 
-/// Return the min and max Y coordinates along edges of `poly` which have a
-/// given X coordinate.
-fn min_max_ys_for_x(poly: Polygon<&[Point]>, x: i32) -> Option<[i32; 2]> {
+/// Return the bounding rectangle of the slice of a polygon with X coordinates
+/// between `min_x` and `max_x` inclusive.
+fn polygon_slice_bounding_rect(poly: Polygon<&[Point]>, min_x: i32, max_x: i32) -> Option<Rect> {
     poly.edges()
-        .filter_map(|e| e.y_for_x(x as f32).map(|y| y.round() as i32))
-        .fold(None, |min_max, y| {
-            min_max
-                .map(|[min, max]| [min.min(y), max.max(y)])
-                .or(Some([y, y]))
-        })
-}
+        .filter_map(|e| {
+            let e = e.rightwards();
 
-/// Return the bounding rectangle of a character within a line polygon that
-/// has X coordinates ranging from `min_x` to `max_x`.
-///
-/// Returns `None` if the X coordinates are out of bounds for the polygon.
-fn char_rect(line_poly: Polygon<&[Point]>, min_x: i32, max_x: i32) -> Option<Rect> {
-    let [min_left_y, max_left_y] = min_max_ys_for_x(line_poly, min_x)?;
-    let [min_right_y, max_right_y] = min_max_ys_for_x(line_poly, max_x)?;
-    Some(Rect::from_tlbr(
-        min_left_y.min(min_right_y),
-        min_x,
-        max_left_y.max(max_right_y),
-        max_x,
-    ))
+            // Filter out edges that don't overlap [min_x, max_x].
+            if (e.start.x < min_x && e.end.x < min_x) || (e.start.x > max_x && e.end.x > max_x) {
+                return None;
+            }
+
+            // Truncate edge to [min_x, max_x].
+            let trunc_edge_start = e
+                .y_for_x(min_x as f32)
+                .map(|y| Point::from_yx(y.round() as i32, min_x))
+                .unwrap_or(e.start);
+
+            let trunc_edge_end = e
+                .y_for_x(max_x as f32)
+                .map(|y| Point::from_yx(y.round() as i32, max_x))
+                .unwrap_or(e.end);
+
+            Some(Line::from_endpoints(trunc_edge_start, trunc_edge_end))
+        })
+        .fold(None, |bounding_rect, e| {
+            let edge_br = e.bounding_rect();
+            bounding_rect.map(|br| br.union(edge_br)).or(Some(edge_br))
+        })
 }
 
 /// Method used to decode sequence model outputs to a sequence of labels.
@@ -389,10 +393,9 @@ fn text_lines_from_recognition_results(results: &[LineRecResult]) -> Vec<Option<
                     // Since the recognition input is padded, it is possible to
                     // get predicted characters in the output with positions
                     // that correspond to the padding region, and thus are
-                    // outside the bounds of the original line. Clamp the X
-                    // coordinates to ensure they are in-bounds for the line.
+                    // outside the bounds of the original line. Clamp start
+                    // coordinate to ensure it is in-bounds for the line.
                     let start_x = start_x.clamp(line_rect.left(), line_rect.right());
-                    let end_x = end_x.clamp(line_rect.left(), line_rect.right());
 
                     let char = DEFAULT_ALPHABET
                         .chars()
@@ -401,8 +404,12 @@ fn text_lines_from_recognition_results(results: &[LineRecResult]) -> Vec<Option<
 
                     TextChar {
                         char,
-                        rect: char_rect(result.line.region.borrow(), start_x, end_x)
-                            .expect("invalid X coords"),
+                        rect: polygon_slice_bounding_rect(
+                            result.line.region.borrow(),
+                            start_x,
+                            end_x,
+                        )
+                        .expect("invalid X coords"),
                     }
                 })
                 .collect();
