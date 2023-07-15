@@ -295,21 +295,17 @@ fn min_max_ys_for_x(poly: Polygon<&[Point]>, x: i32) -> Option<[i32; 2]> {
 
 /// Return the bounding rectangle of a character within a line polygon that
 /// has X coordinates ranging from `min_x` to `max_x`.
-fn char_rect(line_poly: Polygon<&[Point]>, min_x: i32, max_x: i32) -> Rect {
-    let default_min_max = || {
-        let rect = line_poly.bounding_rect();
-        [rect.top(), rect.bottom()]
-    };
-    let [min_left_y, max_left_y] =
-        min_max_ys_for_x(line_poly, min_x).unwrap_or_else(default_min_max);
-    let [min_right_y, max_right_y] =
-        min_max_ys_for_x(line_poly, max_x).unwrap_or_else(default_min_max);
-    Rect::from_tlbr(
+///
+/// Returns `None` if the X coordinates are out of bounds for the polygon.
+fn char_rect(line_poly: Polygon<&[Point]>, min_x: i32, max_x: i32) -> Option<Rect> {
+    let [min_left_y, max_left_y] = min_max_ys_for_x(line_poly, min_x)?;
+    let [min_right_y, max_right_y] = min_max_ys_for_x(line_poly, max_x)?;
+    Some(Rect::from_tlbr(
         min_left_y.min(min_right_y),
         min_x,
         max_left_y.max(max_right_y),
         max_x,
-    )
+    ))
 }
 
 /// Method used to decode sequence model outputs to a sequence of labels.
@@ -518,19 +514,25 @@ fn recognize_text_lines(
                 .iter()
                 .enumerate()
                 .map(|(i, step)| {
-                    let end_pos = if let Some(next_step) = steps.get(i + 1) {
-                        next_step.pos
-                    } else {
-                        result.line.resized_width / downsample_factor
-                    };
-
                     // X coord range of character in line recognition input image.
                     let start_x = step.pos * downsample_factor;
-                    let end_x = end_pos * downsample_factor;
+                    let end_x = if let Some(next_step) = steps.get(i + 1) {
+                        next_step.pos * downsample_factor
+                    } else {
+                        result.line.resized_width
+                    };
 
                     // Map X coords to those of the input image.
                     let [start_x, end_x] = [start_x, end_x]
                         .map(|x| line_rect.left() + (x as f32 * x_scale_factor) as i32);
+
+                    // Since the recognition input is padded, it is possible we
+                    // get predicted positions that correspond to the padding
+                    // region, and thus are outside the bounds of the original
+                    // line. Clamp the X coordinates to ensure they are in-bounds
+                    // for the line.
+                    let start_x = start_x.clamp(line_rect.left(), line_rect.right());
+                    let end_x = end_x.clamp(line_rect.left(), line_rect.right());
 
                     let char = DEFAULT_ALPHABET
                         .chars()
@@ -539,7 +541,8 @@ fn recognize_text_lines(
 
                     TextChar {
                         char,
-                        rect: char_rect(result.line.region.borrow(), start_x, end_x),
+                        rect: char_rect(result.line.region.borrow(), start_x, end_x)
+                            .expect("invalid X coords"),
                     }
                 })
                 .collect();
