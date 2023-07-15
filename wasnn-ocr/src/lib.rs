@@ -386,11 +386,11 @@ fn text_lines_from_recognition_results(results: &[LineRecResult]) -> Vec<Option<
                     let [start_x, end_x] = [start_x, end_x]
                         .map(|x| line_rect.left() + (x as f32 * x_scale_factor) as i32);
 
-                    // Since the recognition input is padded, it is possible we
-                    // get predicted positions that correspond to the padding
-                    // region, and thus are outside the bounds of the original
-                    // line. Clamp the X coordinates to ensure they are in-bounds
-                    // for the line.
+                    // Since the recognition input is padded, it is possible to
+                    // get predicted characters in the output with positions
+                    // that correspond to the padding region, and thus are
+                    // outside the bounds of the original line. Clamp the X
+                    // coordinates to ensure they are in-bounds for the line.
                     let start_x = start_x.clamp(line_rect.left(), line_rect.right());
                     let end_x = end_x.clamp(line_rect.left(), line_rect.right());
 
