@@ -235,7 +235,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
             DecodeMethod::Greedy
         },
-    });
+    })?;
 
     let ocr_input = engine.prepare_input(color_img.view())?;
     let word_rects = engine.detect_words(&ocr_input)?;

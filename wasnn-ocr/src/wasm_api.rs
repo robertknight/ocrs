@@ -64,7 +64,8 @@ impl OcrEngine {
             detection_model,
             recognition_model,
             ..Default::default()
-        });
+        })
+        .map_err(|e| e.to_string())?;
         Ok(OcrEngine { engine })
     }
 

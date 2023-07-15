@@ -233,8 +233,8 @@ fn prepare_text_line_batch(
     page_rect: Rect,
     output_height: usize,
     output_width: usize,
-) -> Tensor<f32> {
-    let mut output = Tensor::zeros(&[lines.len(), 1, output_height, output_width]);
+) -> NdTensor<f32, 4> {
+    let mut output = NdTensor::zeros([lines.len(), 1, output_height, output_width]);
     output.data_mut().fill(BLACK_VALUE);
 
     // Page rect adjusted to only contain coordinates that are valid for
@@ -264,7 +264,7 @@ fn prepare_text_line_batch(
         }
 
         let resized_shape = &[1, 1, output_height as i32, line.resized_width as i32];
-        let resized_line_img = resize(
+        let mut resized_line_img = resize(
             line_img.view(),
             ResizeTarget::Sizes(resized_shape.into()),
             ResizeMode::Linear,
@@ -273,9 +273,14 @@ fn prepare_text_line_batch(
         )
         .unwrap();
 
+        // Remove batch, channel dims.
+        resized_line_img.reshape(&[output_height, line.resized_width as usize]);
+
+        let resized_line_img: NdTensor<f32, 2> = resized_line_img.try_into().unwrap();
+
         output
             .slice_mut((group_line_index, 0, .., ..(line.resized_width as usize)))
-            .copy_from(&resized_line_img.squeezed());
+            .copy_from(&resized_line_img);
     }
 
     output
@@ -411,6 +416,65 @@ fn text_lines_from_recognition_results(results: &[LineRecResult]) -> Vec<Option<
         .collect()
 }
 
+/// Encapsulates validation and execution of the text line recognition model.
+struct RecognitionModel {
+    model: Model,
+    input_id: usize,
+    input_shape: Vec<Dimension>,
+    output_id: usize,
+}
+
+impl RecognitionModel {
+    /// Validate that a model has the expected inputs and outputs for
+    /// a text recognition model and wrap it as a [RecognitionModel].
+    fn from_model(model: Model) -> Result<RecognitionModel, Box<dyn Error>> {
+        let input_id = model
+            .input_ids()
+            .first()
+            .copied()
+            .ok_or("recognition model has no inputs")?;
+        let input_shape = model
+            .node_info(input_id)
+            .and_then(|info| info.shape())
+            .ok_or("recognition model does not specify input shape")?;
+        let output_id = model
+            .output_ids()
+            .first()
+            .copied()
+            .ok_or("recognition model has no outputs")?;
+        Ok(RecognitionModel {
+            model,
+            input_id,
+            input_shape: input_shape.into_iter().collect(),
+            output_id,
+        })
+    }
+
+    /// Return the expected height of input line images.
+    fn input_height(&self) -> u32 {
+        match self.input_shape[2] {
+            Dimension::Fixed(size) => size.try_into().unwrap(),
+            Dimension::Symbolic(_) => 50,
+        }
+    }
+
+    /// Run text recognition on an NCHW batch of text line images, and return
+    /// a `[batch, seq, label]` tensor of class probabilities.
+    fn run(&self, input: NdTensor<f32, 4>) -> NdTensor<f32, 3> {
+        let input: Tensor<f32> = input.into();
+        let rec_output = self
+            .model
+            .run(&[(self.input_id, (&input).into())], &[self.output_id], None)
+            .unwrap();
+        let mut rec_sequence = rec_output[0].as_float_ref().unwrap().to_tensor();
+
+        // Transpose from [seq, batch, class] => [batch, seq, class]
+        rec_sequence.permute(&[1, 0, 2]);
+
+        rec_sequence.try_into().expect("incorrect output shape")
+    }
+}
+
 /// Recognize text lines in an image.
 ///
 /// `image` is a CHW greyscale image with values in the range `ZERO_VALUE` to
@@ -424,7 +488,7 @@ fn text_lines_from_recognition_results(results: &[LineRecResult]) -> Vec<Option<
 fn recognize_text_lines(
     image: NdTensorView<f32, 3>,
     lines: &[Vec<RotatedRect>],
-    model: &Model,
+    model: &RecognitionModel,
     opts: RecognitionOpt,
 ) -> Result<Vec<Option<TextLine>>, Box<dyn Error>> {
     let RecognitionOpt {
@@ -434,26 +498,6 @@ fn recognize_text_lines(
 
     let [_, img_height, img_width] = image.shape();
     let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
-    let rec_input_id = model
-        .input_ids()
-        .first()
-        .copied()
-        .expect("recognition model has no inputs");
-    let rec_input_shape = model
-        .node_info(rec_input_id)
-        .and_then(|info| info.shape())
-        .ok_or("recognition model does not specify input shape")?;
-    let rec_output_id = model
-        .output_ids()
-        .first()
-        .copied()
-        .ok_or("recognition model has no outputs")?;
-
-    // Get the input height that the recognition model expects.
-    let rec_img_height = match rec_input_shape[2] {
-        Dimension::Fixed(size) => size,
-        Dimension::Symbolic(_) => 50,
-    };
 
     // Compute width to resize a text line image to, for a given height.
     fn resized_line_width(orig_width: i32, orig_height: i32, height: i32) -> u32 {
@@ -474,6 +518,7 @@ fn recognize_text_lines(
     // such that all line images have a similar width reduces this wastage.
     // There is a trade-off between maximizing the batch size and minimizing
     // the variance in width of images in the batch.
+    let rec_img_height = model.input_height();
     let mut line_groups: HashMap<i32, Vec<TextRecLine>> = HashMap::new();
     for (line_index, word_rects) in lines.iter().enumerate() {
         let line_rect = bounding_rect(word_rects.iter()).expect("line has no words");
@@ -519,23 +564,12 @@ fn recognize_text_lines(
                 &image,
                 &lines,
                 page_rect,
-                rec_img_height,
+                rec_img_height as usize,
                 group_width as usize,
             );
 
-            // Perform text recognition on the line batch.
-            let rec_output = model
-                .run(
-                    &[(rec_input_id, (&rec_input).into())],
-                    &[rec_output_id],
-                    None,
-                )
-                .unwrap();
-            let mut rec_sequence = rec_output[0].as_float_ref().unwrap().to_tensor();
-
-            // Transpose from [seq, batch, class] => [batch, seq, class]
-            rec_sequence.permute(&[1, 0, 2]);
-            let ctc_input_len = rec_sequence.shape()[1];
+            let rec_output = model.run(rec_input);
+            let ctc_input_len = rec_output.shape()[1];
 
             // Apply CTC decoding to get the label sequence for each line.
             lines
@@ -543,7 +577,7 @@ fn recognize_text_lines(
                 .enumerate()
                 .map(|(group_line_index, line)| {
                     let decoder = CtcDecoder::new();
-                    let input_seq = rec_sequence.nd_slice([group_line_index]);
+                    let input_seq = rec_output.slice([group_line_index]);
                     let ctc_output = match decode_method {
                         DecodeMethod::Greedy => decoder.decode_greedy(input_seq),
                         DecodeMethod::BeamSearch { width } => decoder.decode_beam(input_seq, width),
@@ -588,7 +622,10 @@ pub struct OcrEngineParams {
 /// OcrEngine uses machine learning models to detect text, analyze layout
 /// and recognize text in an image.
 pub struct OcrEngine {
-    params: OcrEngineParams,
+    detection_model: Option<Model>,
+    recognition_model: Option<RecognitionModel>,
+    debug: bool,
+    decode_method: DecodeMethod,
 }
 
 /// Input image for OCR analysis. Instances are created using
@@ -600,8 +637,17 @@ pub struct OcrInput {
 
 impl OcrEngine {
     /// Construct a new engine from a given configuration.
-    pub fn new(params: OcrEngineParams) -> OcrEngine {
-        OcrEngine { params }
+    pub fn new(params: OcrEngineParams) -> Result<OcrEngine, Box<dyn Error>> {
+        let recognition_model = params
+            .recognition_model
+            .map(RecognitionModel::from_model)
+            .transpose()?;
+        Ok(OcrEngine {
+            detection_model: params.detection_model,
+            recognition_model,
+            debug: params.debug,
+            decode_method: params.decode_method,
+        })
     }
 
     /// Preprocess an image for use with other methods of the engine.
@@ -619,10 +665,10 @@ impl OcrEngine {
     /// Returns an unordered list of the oriented bounding rectangles of each
     /// word found.
     pub fn detect_words(&self, input: &OcrInput) -> Result<Vec<RotatedRect>, Box<dyn Error>> {
-        let Some(detection_model) = self.params.detection_model.as_ref() else {
+        let Some(detection_model) = self.detection_model.as_ref() else {
             return Err("Detection model not loaded".into());
         };
-        detect_words(input.image.view(), detection_model, self.params.debug)
+        detect_words(input.image.view(), detection_model, self.debug)
     }
 
     /// Perform layout analysis to group words into lines and sort them in
@@ -654,7 +700,7 @@ impl OcrEngine {
         input: &OcrInput,
         lines: &[Vec<RotatedRect>],
     ) -> Result<Vec<Option<TextLine>>, Box<dyn Error>> {
-        let Some(recognition_model) = self.params.recognition_model.as_ref() else {
+        let Some(recognition_model) = self.recognition_model.as_ref() else {
             return Err("Recognition model not loaded".into());
         };
         recognize_text_lines(
@@ -662,8 +708,8 @@ impl OcrEngine {
             lines,
             recognition_model,
             RecognitionOpt {
-                debug: self.params.debug,
-                decode_method: self.params.decode_method,
+                debug: self.debug,
+                decode_method: self.decode_method,
             },
         )
     }
@@ -834,7 +880,7 @@ mod tests {
             detection_model: None,
             recognition_model: None,
             ..Default::default()
-        });
+        })?;
         let input = engine.prepare_input(image.view())?;
 
         let [chans, height, width] = input.image.shape();
@@ -853,7 +899,7 @@ mod tests {
             detection_model: Some(fake_detection_model()),
             recognition_model: None,
             ..Default::default()
-        });
+        })?;
         let input = engine.prepare_input(image.view())?;
         let words = engine.detect_words(&input)?;
 
@@ -877,7 +923,7 @@ mod tests {
             detection_model: None,
             recognition_model: Some(fake_recognition_model()),
             ..Default::default()
-        });
+        })?;
         let input = engine.prepare_input(image.view())?;
 
         let mut line_regions: Vec<Vec<RotatedRect>> = Vec::new();
