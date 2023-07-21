@@ -158,7 +158,7 @@ fn detect_words(
         let pads = &[0, 0, 0, 0, 0, 0, pad_bottom, pad_right];
         pad(image.view().as_dyn(), &pads.into(), BLACK_VALUE)?
     } else {
-        image.as_dyn().to_tensor()
+        image.as_dyn().to_owned()
     };
 
     // Resize images to the text detection model's input size.
