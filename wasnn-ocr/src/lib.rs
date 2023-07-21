@@ -183,7 +183,7 @@ fn detect_words(
     // binary text/not-text mask.
     let text_mask = &outputs[0].as_float_ref().unwrap();
     let text_mask = bilinear_resize(
-        text_mask.slice((
+        text_mask.view().slice((
             ..,
             ..,
             ..(in_height - pad_bottom as usize),
@@ -193,7 +193,9 @@ fn detect_words(
         img_width as i32,
     )?;
     let threshold = 0.2;
-    let binary_mask = text_mask.map(|prob| if *prob > threshold { 1i32 } else { 0 });
+    let binary_mask = text_mask
+        .view()
+        .map(|prob| if *prob > threshold { 1i32 } else { 0 });
 
     // Distance to expand bounding boxes by. This is useful when the model is
     // trained to assign a positive label to pixels in a smaller area than the
@@ -201,7 +203,8 @@ fn detect_words(
     // objects.
     let expand_dist = 3.;
 
-    let word_rects = find_connected_component_rects(binary_mask.nd_slice([0, 0]), expand_dist);
+    let word_rects =
+        find_connected_component_rects(binary_mask.view().nd_slice([0, 0]), expand_dist);
 
     Ok(word_rects)
 }
@@ -473,7 +476,7 @@ impl RecognitionModel {
             .model
             .run(&[(self.input_id, (&input).into())], &[self.output_id], None)
             .unwrap();
-        let mut rec_sequence = rec_output[0].as_float_ref().unwrap().to_tensor();
+        let mut rec_sequence = rec_output[0].as_float_ref().unwrap().to_owned();
 
         // Transpose from [seq, batch, class] => [batch, seq, class]
         rec_sequence.permute(&[1, 0, 2]);
