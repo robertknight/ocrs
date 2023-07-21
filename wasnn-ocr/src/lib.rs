@@ -280,7 +280,7 @@ fn prepare_text_line_batch(
 
         output
             .slice_mut((group_line_index, 0, .., ..(line.resized_width as usize)))
-            .copy_from(&resized_line_img);
+            .copy_from(&resized_line_img.view());
     }
 
     output
@@ -584,7 +584,7 @@ fn recognize_text_lines(
                 .enumerate()
                 .map(|(group_line_index, line)| {
                     let decoder = CtcDecoder::new();
-                    let input_seq = rec_output.slice([group_line_index]);
+                    let input_seq = rec_output.view().slice([group_line_index]);
                     let ctc_output = match decode_method {
                         DecodeMethod::Greedy => decoder.decode_greedy(input_seq),
                         DecodeMethod::BeamSearch { width } => decoder.decode_beam(input_seq, width),
