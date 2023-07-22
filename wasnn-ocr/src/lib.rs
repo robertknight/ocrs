@@ -7,7 +7,7 @@ use wasnn::ctc::{CtcDecoder, CtcHypothesis};
 use wasnn::ops::{pad, resize, CoordTransformMode, NearestMode, ResizeMode, ResizeTarget};
 use wasnn::{Dimension, Model, RunOptions};
 use wasnn_imageproc::{bounding_rect, BoundingRect, Line, Point, Polygon, Rect, RotatedRect};
-use wasnn_tensor::{Layout, NdTensor, NdTensorView, Tensor, TensorView};
+use wasnn_tensor::{Layout, NdTensor, NdTensorView, Tensor, TensorCommon, TensorView};
 
 mod log;
 pub mod page_layout;
@@ -158,7 +158,7 @@ fn detect_words(
         let pads = &[0, 0, 0, 0, 0, 0, pad_bottom, pad_right];
         pad(image.view().as_dyn(), &pads.into(), BLACK_VALUE)?
     } else {
-        image.as_dyn().to_owned()
+        image.as_dyn().to_tensor()
     };
 
     // Resize images to the text detection model's input size.
@@ -183,7 +183,7 @@ fn detect_words(
     // binary text/not-text mask.
     let text_mask = &outputs[0].as_float_ref().unwrap();
     let text_mask = bilinear_resize(
-        text_mask.view().slice((
+        text_mask.slice((
             ..,
             ..,
             ..(in_height - pad_bottom as usize),
@@ -193,9 +193,7 @@ fn detect_words(
         img_width as i32,
     )?;
     let threshold = 0.2;
-    let binary_mask = text_mask
-        .view()
-        .map(|prob| if *prob > threshold { 1i32 } else { 0 });
+    let binary_mask = text_mask.map(|prob| if *prob > threshold { 1i32 } else { 0 });
 
     // Distance to expand bounding boxes by. This is useful when the model is
     // trained to assign a positive label to pixels in a smaller area than the
@@ -476,7 +474,7 @@ impl RecognitionModel {
             .model
             .run(&[(self.input_id, (&input).into())], &[self.output_id], None)
             .unwrap();
-        let mut rec_sequence = rec_output[0].as_float_ref().unwrap().to_owned();
+        let mut rec_sequence = rec_output[0].as_float_ref().unwrap().to_tensor();
 
         // Transpose from [seq, batch, class] => [batch, seq, class]
         rec_sequence.permute(&[1, 0, 2]);
