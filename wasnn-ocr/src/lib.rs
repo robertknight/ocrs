@@ -7,7 +7,9 @@ use wasnn::ctc::{CtcDecoder, CtcHypothesis};
 use wasnn::ops::{pad, resize, CoordTransformMode, NearestMode, ResizeMode, ResizeTarget};
 use wasnn::{Dimension, Model, RunOptions};
 use wasnn_imageproc::{bounding_rect, BoundingRect, Line, Point, Polygon, Rect, RotatedRect};
-use wasnn_tensor::{Layout, NdTensor, NdTensorView, Tensor, TensorCommon, TensorView};
+use wasnn_tensor::{
+    Layout, NdTensor, NdTensorCommon, NdTensorView, Tensor, TensorCommon, TensorView,
+};
 
 mod log;
 pub mod page_layout;
@@ -156,7 +158,7 @@ fn detect_words(
     let pad_right = (in_width as i32 - img_width as i32).max(0);
     let grey_img = if pad_bottom > 0 || pad_right > 0 {
         let pads = &[0, 0, 0, 0, 0, 0, pad_bottom, pad_right];
-        pad(image.view().as_dyn(), &pads.into(), BLACK_VALUE)?
+        pad(image.as_dyn(), &pads.into(), BLACK_VALUE)?
     } else {
         image.as_dyn().to_tensor()
     };
@@ -585,7 +587,7 @@ fn recognize_text_lines(
                 .enumerate()
                 .map(|(group_line_index, line)| {
                     let decoder = CtcDecoder::new();
-                    let input_seq = rec_output.view().slice([group_line_index]);
+                    let input_seq = rec_output.slice([group_line_index]);
                     let ctc_output = match decode_method {
                         DecodeMethod::Greedy => decoder.decode_greedy(input_seq),
                         DecodeMethod::BeamSearch { width } => decoder.decode_beam(input_seq, width),
