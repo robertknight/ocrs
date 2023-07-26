@@ -204,7 +204,7 @@ fn detect_words(
     let expand_dist = 3.;
 
     let word_rects =
-        find_connected_component_rects(binary_mask.view().nd_slice([0, 0]), expand_dist);
+        find_connected_component_rects(binary_mask.slice([0, 0]).nd_view(), expand_dist);
 
     Ok(word_rects)
 }
@@ -248,27 +248,24 @@ fn prepare_text_line_batch(
         let grey_chan = image.slice([0]);
 
         let line_rect = line.region.bounding_rect();
-        let mut line_img = Tensor::zeros(&[
-            1,
-            1,
-            line_rect.height() as usize,
-            line_rect.width() as usize,
-        ]);
+        let mut line_img =
+            NdTensor::zeros([line_rect.height() as usize, line_rect.width() as usize]);
         line_img.data_mut().fill(BLACK_VALUE);
 
-        let mut line_img_chan = line_img.nd_slice_mut([0, 0]);
         for in_p in line.region.fill_iter() {
             let out_p = Point::from_yx(in_p.y - line_rect.top(), in_p.x - line_rect.left());
             if !page_index_rect.contains_point(in_p) || !page_index_rect.contains_point(out_p) {
                 continue;
             }
-            line_img_chan[[out_p.y as usize, out_p.x as usize]] =
+            line_img[[out_p.y as usize, out_p.x as usize]] =
                 grey_chan[[in_p.y as usize, in_p.x as usize]];
         }
 
         let resized_shape = &[1, 1, output_height as i32, line.resized_width as i32];
-        let mut resized_line_img = resize(
-            line_img.view(),
+        let resized_line_img = resize(
+            line_img
+                .reshaped([1, 1, line_img.size(0), line_img.size(1)])
+                .as_dyn(),
             ResizeTarget::Sizes(resized_shape.into()),
             ResizeMode::Linear,
             CoordTransformMode::default(),
@@ -276,14 +273,12 @@ fn prepare_text_line_batch(
         )
         .unwrap();
 
-        // Remove batch, channel dims.
-        resized_line_img.reshape(&[output_height, line.resized_width as usize]);
-
-        let resized_line_img: NdTensor<f32, 2> = resized_line_img.try_into().unwrap();
+        let resized_line_img: NdTensorView<f32, 2> =
+            resized_line_img.squeezed().try_into().unwrap();
 
         output
             .slice_mut((group_line_index, 0, .., ..(line.resized_width as usize)))
-            .copy_from(&resized_line_img.view());
+            .copy_from(&resized_line_img);
     }
 
     output
