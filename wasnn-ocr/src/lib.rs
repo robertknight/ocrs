@@ -375,7 +375,7 @@ fn text_lines_from_recognition_results(results: &[LineRecResult]) -> Vec<Option<
             let text_line: Vec<TextChar> = steps
                 .iter()
                 .enumerate()
-                .map(|(i, step)| {
+                .filter_map(|(i, step)| {
                     // X coord range of character in line recognition input image.
                     let start_x = step.pos * downsample_factor;
                     let end_x = if let Some(next_step) = steps.get(i + 1) {
@@ -391,16 +391,17 @@ fn text_lines_from_recognition_results(results: &[LineRecResult]) -> Vec<Option<
                     // Since the recognition input is padded, it is possible to
                     // get predicted characters in the output with positions
                     // that correspond to the padding region, and thus are
-                    // outside the bounds of the original line. Clamp start
-                    // coordinate to ensure it is in-bounds for the line.
-                    let start_x = start_x.clamp(line_rect.left(), line_rect.right());
+                    // outside the bounds of the original line. Ignore these.
+                    if start_x >= line_rect.right() {
+                        return None;
+                    }
 
                     let char = DEFAULT_ALPHABET
                         .chars()
                         .nth((step.label - 1) as usize)
                         .unwrap_or('?');
 
-                    TextChar {
+                    Some(TextChar {
                         char,
                         rect: polygon_slice_bounding_rect(
                             result.line.region.borrow(),
@@ -408,7 +409,7 @@ fn text_lines_from_recognition_results(results: &[LineRecResult]) -> Vec<Option<
                             end_x,
                         )
                         .expect("invalid X coords"),
-                    }
+                    })
                 })
                 .collect();
 
