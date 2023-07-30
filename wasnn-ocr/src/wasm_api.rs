@@ -1,10 +1,79 @@
 use wasm_bindgen::prelude::*;
 
 use wasnn::Model;
-use wasnn_imageproc::BoundingRect;
+use wasnn_imageproc::{min_area_rect, BoundingRect, Point};
 use wasnn_tensor::{Layout, NdTensorCommon, NdTensorView};
 
 use crate::{OcrEngine as BaseOcrEngine, OcrEngineParams, OcrInput, TextItem};
+
+/// Create a collection type that can be used to accept or return collections
+/// from / to JS. On the JS side, these collections are similar to DOM APIs
+/// like [NodeList](https://developer.mozilla.org/en-US/docs/Web/API/NodeList)
+/// and can be enhanced by implementing a `[Symbol.iterator]` method so they
+/// work with `Array.from`, `for ... of` etc:
+///
+/// ```js
+/// ThingList.prototype[Symbol.iterator] = function* () {
+///   for (let i=0; i < this.length; i++) {
+///     yield this.item(i);
+///   }
+/// }
+///
+/// const list = new ThingList();
+/// list.push(new Thing());
+///
+/// for (let item of list) {
+///
+/// }
+/// ```
+///
+/// These collections are a workaround for wasm_bindgen not supporting returning
+/// `Vec<T>` to JS (see
+/// [issue](https://github.com/rustwasm/wasm-bindgen/issues/111)).
+macro_rules! make_item_list {
+    ($list_struct:ident, $item_struct:ident) => {
+        #[wasm_bindgen]
+        #[derive(Clone, Default)]
+        pub struct $list_struct {
+            items: Vec<$item_struct>,
+        }
+
+        impl $list_struct {
+            #[allow(dead_code)]
+            fn from_vec(items: Vec<$item_struct>) -> Self {
+                Self { items }
+            }
+
+            #[allow(dead_code)]
+            fn iter(&self) -> impl Iterator<Item = &$item_struct> {
+                self.items.iter()
+            }
+        }
+
+        #[wasm_bindgen]
+        impl $list_struct {
+            #[wasm_bindgen(constructor)]
+            pub fn new() -> Self {
+                Self { items: Vec::new() }
+            }
+
+            /// Add a new item to the end of the list.
+            pub fn push(&mut self, item: $item_struct) {
+                self.items.push(item.clone());
+            }
+
+            /// Return the item at a given index.
+            pub fn item(&self, index: usize) -> Option<$item_struct> {
+                self.items.get(index).cloned()
+            }
+
+            #[wasm_bindgen(getter)]
+            pub fn length(&self) -> usize {
+                self.items.len()
+            }
+        }
+    };
+}
 
 /// Options for constructing an [OcrEngine].
 #[derive(Default)]
@@ -93,6 +162,61 @@ impl OcrEngine {
             .prepare_input(tensor.view())
             .map(|input| Image { input })
             .map_err(|e| e.to_string())
+    }
+
+    /// Detect text in an image.
+    ///
+    /// Returns a list of lines that were found. These can be passed to
+    /// `recognizeText` identify the characters.
+    #[wasm_bindgen(js_name = detectText)]
+    pub fn detect_text(&self, image: &Image) -> Result<DetectedLineList, String> {
+        let words = self
+            .engine
+            .detect_words(&image.input)
+            .map_err(|e| e.to_string())?;
+        let lines: Vec<_> = self
+            .engine
+            .find_text_lines(&image.input, &words)
+            .into_iter()
+            .map(|words| {
+                DetectedLine::new(
+                    words
+                        .into_iter()
+                        .map(|word| RotatedRect { rect: word })
+                        .collect(),
+                )
+            })
+            .collect();
+        Ok(DetectedLineList::from_vec(lines))
+    }
+
+    /// Recognize text that was previously detected with `detectText`.
+    ///
+    /// Returns a list of `TextLine` objects that can be used to query the text
+    /// and bounding boxes of each line.
+    #[wasm_bindgen(js_name = recognizeText)]
+    pub fn recognize_text(
+        &self,
+        image: &Image,
+        lines: &DetectedLineList,
+    ) -> Result<TextLineList, String> {
+        let lines: Vec<Vec<wasnn_imageproc::RotatedRect>> = lines
+            .iter()
+            .map(|line| {
+                let words: Vec<wasnn_imageproc::RotatedRect> =
+                    line.words.iter().map(|word| word.rect).collect();
+                words
+            })
+            .collect();
+
+        let text_lines = self
+            .engine
+            .recognize_text(&image.input, &lines)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .filter_map(|text_line| text_line.map(|tl| TextLine { line: tl }))
+            .collect();
+        Ok(TextLineList::from_vec(text_lines))
     }
 
     /// Detect and recognize text in an image.
@@ -192,67 +316,45 @@ impl RotatedRect {
     }
 }
 
-/// Create a collection type that can be used to accept or return collections
-/// from / to JS. On the JS side, these collections are similar to DOM APIs
-/// like [NodeList](https://developer.mozilla.org/en-US/docs/Web/API/NodeList)
-/// and can be enhanced by implementing a `[Symbol.iterator]` method so they
-/// work with `Array.from`, `for ... of` etc:
-///
-/// ```js
-/// ThingList.prototype[Symbol.iterator] = function* () {
-///   for (let i=0; i < this.length; i++) {
-///     yield this.item(i);
-///   }
-/// }
-///
-/// const list = new ThingList();
-/// list.push(new Thing());
-///
-/// for (let item of list) {
-///
-/// }
-/// ```
-///
-/// These collections are a workaround for wasm_bindgen not supporting returning
-/// `Vec<T>` to JS (see
-/// [issue](https://github.com/rustwasm/wasm-bindgen/issues/111)).
-macro_rules! make_item_list {
-    ($list_struct:ident, $item_struct:ident) => {
-        #[wasm_bindgen]
-        #[derive(Default)]
-        pub struct $list_struct {
-            items: Vec<$item_struct>,
-        }
+make_item_list!(RotatedRectList, RotatedRect);
 
-        #[wasm_bindgen]
-        impl $list_struct {
-            fn from_vec(items: Vec<$item_struct>) -> Self {
-                Self { items }
-            }
-
-            #[wasm_bindgen(constructor)]
-            pub fn new() -> Self {
-                Self { items: Vec::new() }
-            }
-
-            /// Add a new item to the end of the list.
-            pub fn push(&mut self, item: $item_struct) {
-                self.items.push(item.clone());
-            }
-
-            /// Return the item at a given index.
-            pub fn item(&self, index: usize) -> Option<$item_struct> {
-                self.items.get(index).cloned()
-            }
-
-            #[wasm_bindgen(getter)]
-            pub fn length(&self) -> usize {
-                self.items.len()
-            }
-        }
-    };
+/// A line of text that has been detected, but not recognized.
+///
+/// This contains information about the location of the text, but not the
+/// string contents.
+#[wasm_bindgen]
+#[derive(Clone)]
+pub struct DetectedLine {
+    words: RotatedRectList,
 }
 
+#[wasm_bindgen]
+impl DetectedLine {
+    fn new(words: Vec<RotatedRect>) -> DetectedLine {
+        DetectedLine {
+            words: RotatedRectList::from_vec(words),
+        }
+    }
+
+    #[wasm_bindgen(js_name = rotatedRect)]
+    pub fn rotated_rect(&self) -> RotatedRect {
+        let points: Vec<Point> = self
+            .words
+            .iter()
+            .flat_map(|word| word.rect.corners().into_iter())
+            .collect();
+        let rect = min_area_rect(&points).expect("expected non-empty rect");
+        RotatedRect { rect }
+    }
+
+    pub fn words(&self) -> RotatedRectList {
+        self.words.clone()
+    }
+}
+
+make_item_list!(DetectedLineList, DetectedLine);
+
+/// Bounding box and text of a word that was recognized.
 #[wasm_bindgen]
 #[derive(Clone)]
 pub struct TextWord {
@@ -276,6 +378,7 @@ impl TextWord {
 
 make_item_list!(TextWordList, TextWord);
 
+/// A sequence of `TextWord`s that were recognized, forming a line.
 #[wasm_bindgen]
 #[derive(Clone)]
 pub struct TextLine {
