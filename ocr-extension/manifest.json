@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Pixel Reader",
+  "description": "Copy text from images and videos",
+  "version": "1.0",
+  "action": {
+    "default_icon": "images/eye-32.png"
+  },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval';"
+  },
+  "minimum_chrome_version": "92",
+  "permissions": ["activeTab", "scripting"]
+}
