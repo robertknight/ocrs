@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::*;
 
 use wasnn::Model;
 use wasnn_imageproc::BoundingRect;
-use wasnn_tensor::{Layout, NdTensorView};
+use wasnn_tensor::{Layout, NdTensorCommon, NdTensorView};
 
 use crate::{OcrEngine as BaseOcrEngine, OcrEngineParams, OcrInput, TextItem};
 
@@ -156,7 +156,6 @@ impl Image {
         // [0, 255].
         self.input
             .image
-            .view()
             .permuted([1, 2, 0])
             .iter()
             .map(|x| ((x + 0.5) * 255.) as u8)
