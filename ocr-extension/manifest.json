@@ -14,5 +14,11 @@
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval';"
   },
   "minimum_chrome_version": "92",
-  "permissions": ["activeTab", "scripting"]
+  "permissions": ["activeTab", "scripting"],
+  "web_accessible_resources": [
+    {
+      "matches": ["<all_urls>"],
+      "resources": ["build-extension/content.js"]
+    }
+  ]
 }

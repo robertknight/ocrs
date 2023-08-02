@@ -4,6 +4,8 @@ import {
   OcrEngineInit,
   default as initOcrLib,
 } from "../build/wasnn_ocr.js";
+import type { LineRecResult, RotatedRect, WordRecResult } from "./types";
+import type * as contentModule from "./content";
 
 /** Interface of the various `*List` types exported by the OCR lib. */
 type ListLike<T> = {
@@ -84,85 +86,9 @@ function* listItems<T>(list: ListLike<T>): Generator<T> {
   }
 }
 
-/**
- * Array of coordinates of corners of a rotated rect, in the order
- * [x0, y0, x1, y1, x2, y2, x3, y3].
- */
-type RotatedRect = number[];
-
-/**
- * Show detected text in the current tab and enable the user to select lines.
- */
-function showDetectedText(lines: RotatedRect[]) {
-  const canvas = document.createElement("canvas");
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  Object.assign(canvas.style, {
-    position: "fixed",
-    top: "0",
-    left: "0",
-    right: "0",
-    bottom: "0",
-    zIndex: 9999,
-  });
-  const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "rgb(0 0 0 / .3)";
-  ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-  document.body.append(canvas);
-
-  // Make line polygons transparent.
-  ctx.globalCompositeOperation = "destination-out";
-  ctx.fillStyle = "white";
-
-  // Map of line index to recognized text.
-  const textCache = new Map();
-
-  const linePaths = lines.map((line) => {
-    const [x0, y0, x1, y1, x2, y2, x3, y3] = line;
-    const path = new Path2D();
-    path.moveTo(x0, y0);
-    path.lineTo(x1, y1);
-    path.lineTo(x2, y2);
-    path.lineTo(x3, y3);
-    path.closePath();
-    return path;
-  });
-
-  for (const path of linePaths) {
-    ctx.fill(path);
-  }
-
-  canvas.onclick = () => {
-    canvas.remove();
-  };
-
-  let prevLineIndex = -1;
-  canvas.onmousemove = async (e) => {
-    const lineIndex = linePaths.findIndex((lp) =>
-      ctx.isPointInPath(lp, e.clientX, e.clientY),
-    );
-    if (lineIndex === prevLineIndex) {
-      return;
-    }
-    prevLineIndex = lineIndex;
-
-    let text = textCache.get(lineIndex);
-    if (text === undefined) {
-      const recResult = await chrome.runtime.sendMessage({
-        method: "recognizeText",
-        args: {
-          lineIndex,
-        },
-      });
-      text = recResult.text;
-      textCache.set(lineIndex, text);
-    }
-
-    console.log("Hovered line", text);
-  };
-}
-
-let recognizeText: ((line: number) => Promise<string>) | undefined;
+let recognizeText:
+  | ((line: number) => Promise<LineRecResult | null>)
+  | undefined;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (
@@ -170,13 +96,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     typeof recognizeText === "function"
   ) {
     // TODO - Handle errors here in case `lineIndex` is invalid.
-    recognizeText(request.args.lineIndex).then((text) =>
-      sendResponse({ text }),
+    recognizeText(request.args.lineIndex).then((result) =>
+      sendResponse(result),
     );
     return true;
   }
   return false;
 });
+
+async function showDetectedText(lines: RotatedRect[]) {
+  const contentSrc = chrome.runtime.getURL("build-extension/content.js");
+  const content: typeof contentModule = await import(contentSrc);
+  content.showDetectedText(lines);
+}
 
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id) {
@@ -234,10 +166,24 @@ chrome.action.onClicked.addListener(async (tab) => {
         throw new Error("Invalid line number");
       }
 
-      const recLines = new DetectedLineList();
-      recLines.push(line);
-      const recResult = ocrEngine.recognizeText(ocrInput, recLines);
-      return recResult.item(0)!.text();
+      const coords = Array.from(line.rotatedRect().corners());
+      const recInput = new DetectedLineList();
+      recInput.push(line);
+
+      const recLines = ocrEngine.recognizeText(ocrInput, recInput);
+      const recLine = recLines.item(0);
+      if (!recLine) {
+        return null;
+      }
+      const words = Array.from(listItems(recLine.words()));
+
+      return {
+        words: words.map((word) => ({
+          text: word.text(),
+          coords: Array.from(word.rotatedRect().corners()),
+        })),
+        coords,
+      };
     };
   } finally {
     chrome.action.setBadgeText({ text: "" });

@@ -5,6 +5,7 @@
     /* Language and Environment */
     "target": "es2022",
     "outDir": "./build-extension",
+    "module": "es2020",
 
     /* Interop Constraints */
     "esModuleInterop": false,
