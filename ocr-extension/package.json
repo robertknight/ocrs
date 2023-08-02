@@ -1,0 +1,26 @@
+{
+  "name": "ocr-extension",
+  "version": "1.0.0",
+  "description": "Browser extension that turns screen pixels into selectable text",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "format": "prettier -w src/**/*.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/robertknight/wasnn.git"
+  },
+  "author": "Robert Knight <robertknight@gmail.com>",
+  "license": "BSD-2-Clause",
+  "bugs": {
+    "url": "https://github.com/robertknight/wasnn/issues"
+  },
+  "homepage": "https://github.com/robertknight/wasnn#readme",
+  "dependencies": {
+    "@types/chrome": "^0.0.242",
+    "prettier": "^3.0.0",
+    "typescript": "^5.1.6"
+  }
+}

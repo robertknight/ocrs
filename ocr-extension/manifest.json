@@ -7,7 +7,7 @@
     "default_icon": "images/eye-32.png"
   },
   "background": {
-    "service_worker": "src/background.js",
+    "service_worker": "build-extension/background.js",
     "type": "module"
   },
   "content_security_policy": {

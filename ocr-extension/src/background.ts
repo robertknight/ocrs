@@ -5,7 +5,18 @@ import {
   default as initOcrLib,
 } from "../build/wasnn_ocr.js";
 
-let ocrResources;
+/** Interface of the various `*List` types exported by the OCR lib. */
+type ListLike<T> = {
+  length: number;
+  item(index: number): T | undefined;
+};
+
+type OCRResources = {
+  detectionModel: Uint8Array;
+  recognitionModel: Uint8Array;
+};
+
+let ocrResources: Promise<OCRResources> | undefined;
 
 /**
  * Initialize the OCR engine and load models.
@@ -37,7 +48,10 @@ async function initOCREngine() {
   return ocrResources;
 }
 
-async function captureTabImage() {
+/**
+ * Capture the visible area of the current tab.
+ */
+async function captureTabImage(): Promise<ImageData> {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   const activeTab = tabs[0];
 
@@ -52,10 +66,10 @@ async function captureTabImage() {
         // possible makes subsequent operations cheaper.
         resizeWidth: activeTab.width,
         resizeHeight: activeTab.height,
-      })
+      }),
     );
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-  const context = canvas.getContext("2d");
+  const context = canvas.getContext("2d")!;
   context.drawImage(bitmap, 0, 0);
   return context.getImageData(0, 0, bitmap.width, bitmap.height);
 }
@@ -64,13 +78,22 @@ async function captureTabImage() {
  * Convert a list-like object returned by the OCR library into an iterator
  * that can be used with `for ... of` or `Array.from`.
  */
-function* listItems(list) {
+function* listItems<T>(list: ListLike<T>): Generator<T> {
   for (let i = 0; i < list.length; i++) {
-    yield list.item(i);
+    yield list.item(i)!;
   }
 }
 
-function drawLines(lines) {
+/**
+ * Array of coordinates of corners of a rotated rect, in the order
+ * [x0, y0, x1, y1, x2, y2, x3, y3].
+ */
+type RotatedRect = number[];
+
+/**
+ * Show detected text in the current tab and enable the user to select lines.
+ */
+function showDetectedText(lines: RotatedRect[]) {
   const canvas = document.createElement("canvas");
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
@@ -82,7 +105,7 @@ function drawLines(lines) {
     bottom: "0",
     zIndex: 9999,
   });
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d")!;
   ctx.fillStyle = "rgb(0 0 0 / .3)";
   ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
   document.body.append(canvas);
@@ -116,7 +139,7 @@ function drawLines(lines) {
   let prevLineIndex = -1;
   canvas.onmousemove = async (e) => {
     const lineIndex = linePaths.findIndex((lp) =>
-      ctx.isPointInPath(lp, e.clientX, e.clientY)
+      ctx.isPointInPath(lp, e.clientX, e.clientY),
     );
     if (lineIndex === prevLineIndex) {
       return;
@@ -139,15 +162,16 @@ function drawLines(lines) {
   };
 }
 
-let recognizeText;
+let recognizeText: ((line: number) => Promise<string>) | undefined;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (
     request.method === "recognizeText" &&
     typeof recognizeText === "function"
   ) {
+    // TODO - Handle errors here in case `lineIndex` is invalid.
     recognizeText(request.args.lineIndex).then((text) =>
-      sendResponse({ text })
+      sendResponse({ text }),
     );
     return true;
   }
@@ -155,6 +179,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 chrome.action.onClicked.addListener(async (tab) => {
+  if (!tab.id) {
+    return;
+  }
+
   // TODO - Dismiss existing captured text in current tab.
 
   chrome.action.setBadgeText({ text: "..." });
@@ -171,36 +199,45 @@ chrome.action.onClicked.addListener(async (tab) => {
     ocrInit.setDetectionModel(detectionModel);
     ocrInit.setRecognitionModel(recognitionModel);
     const ocrEngine = new OcrEngine(ocrInit);
-    const ocrInput = ocrEngine.loadImage(image.width, image.height, image.data);
+    const ocrInput = ocrEngine.loadImage(
+      image.width,
+      image.height,
+      // Cast from `Uint8ClampedArray` to `Uint8Array`.
+      image.data as unknown as Uint8Array,
+    );
 
     const detStart = performance.now();
     const lines = ocrEngine.detectText(ocrInput);
     const detEnd = performance.now();
 
     const lineCoords = Array.from(listItems(lines)).map((line) =>
-      Array.from(line.rotatedRect().corners())
+      Array.from(line.rotatedRect().corners()),
     );
 
     console.log(
       `Detected ${lineCoords.length} lines. Capture ${
         captureEnd - captureStart
-      } ms, detection ${detEnd - detStart}ms.`
+      } ms, detection ${detEnd - detStart}ms.`,
     );
 
     chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: drawLines,
+      func: showDetectedText,
       args: [lineCoords],
     });
 
     // TBD: How long does the Service Worker keep running? Will Chrome terminate
     // it while recognition requests might still come from the page?
     recognizeText = async (lineIndex) => {
-      console.log("Recognizing line", lineIndex);
+      const line = lines.item(lineIndex);
+      if (!line) {
+        throw new Error("Invalid line number");
+      }
+
       const recLines = new DetectedLineList();
-      recLines.push(lines.item(lineIndex));
+      recLines.push(line);
       const recResult = ocrEngine.recognizeText(ocrInput, recLines);
-      return recResult.item(0).text();
+      return recResult.item(0)!.text();
     };
   } finally {
     chrome.action.setBadgeText({ text: "" });
