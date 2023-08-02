@@ -38,12 +38,22 @@ async function initOCREngine() {
 }
 
 async function captureTabImage() {
-  // TODO - Scale down HiDPI images.
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const activeTab = tabs[0];
+
   const bitmap = await chrome.tabs
     .captureVisibleTab()
     .then((dataURL) => fetch(dataURL))
     .then((response) => response.blob())
-    .then((blob) => createImageBitmap(blob));
+    .then((blob) =>
+      createImageBitmap(blob, {
+        // `captureVisibleTab` may return a HiDPI image if
+        // `window.devicePixelRatio > 1`. Scaling the image down as soon as
+        // possible makes subsequent operations cheaper.
+        resizeWidth: activeTab.width,
+        resizeHeight: activeTab.height,
+      })
+    );
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
   const context = canvas.getContext("2d");
   context.drawImage(bitmap, 0, 0);
@@ -85,11 +95,7 @@ function drawLines(lines) {
   const textCache = new Map();
 
   const linePaths = lines.map((line) => {
-    const scaleFactor = window.devicePixelRatio;
-    const [x0, y0, x1, y1, x2, y2, x3, y3] = line.map(
-      (coord) => coord / scaleFactor
-    );
-
+    const [x0, y0, x1, y1, x2, y2, x3, y3] = line;
     const path = new Path2D();
     path.moveTo(x0, y0);
     path.lineTo(x1, y1);
