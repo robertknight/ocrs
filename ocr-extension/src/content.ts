@@ -22,7 +22,7 @@ const fixedFont = {
 /**
  * Create a line of selectable text in the transparent text layer.
  */
-function createTextLine(container: ParentNode, line: LineRecResult) {
+function createTextLine(line: LineRecResult) {
   const lineEl = document.createElement("div");
   lineEl.className = "text-line";
 
@@ -96,8 +96,7 @@ function createTextLine(container: ParentNode, line: LineRecResult) {
     prevWordEl = wordEl;
     prevWordRect = wordRect;
   }
-
-  container.append(lineEl);
+  return lineEl;
 }
 
 /**
@@ -167,6 +166,12 @@ export function showDetectedText(lines: RotatedRect[]) {
     ctx.fill(path);
   }
 
+  const textLayer = document.createElement("div");
+  canvasContainer.shadowRoot!.append(textLayer);
+
+  // Map of line index to text line element.
+  const textLines = new Map<number, HTMLElement>();
+
   let prevLineIndex = -1;
   canvas.onmousemove = async (e) => {
     const lineIndex = linePaths.findIndex((lp) =>
@@ -185,7 +190,21 @@ export function showDetectedText(lines: RotatedRect[]) {
           lineIndex,
         },
       });
-      createTextLine(canvasContainer.shadowRoot!, recResult);
+
+      const lineEl = createTextLine(recResult);
+      lineEl.setAttribute("data-line-index", lineIndex.toString());
+
+      // Insert line such that the DOM order is the same as the output order
+      // from the OCR lib, which produces lines in reading order. This makes
+      // text selection across lines and columns flow properly, provided that
+      // the OCR lib detected the reading order correctly.
+      const successor = Array.from(textLines.entries())
+        .sort((a, b) => a[0] - b[0])
+        .find(([entryLine, entryEl]) => entryLine >= lineIndex);
+      const successorNode = successor ? successor[1] : null;
+      textLayer.insertBefore(lineEl, successorNode);
+
+      textLines.set(lineIndex, lineEl);
       textCache.set(lineIndex, recResult);
       cachedResult = recResult;
     }
