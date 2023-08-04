@@ -5,6 +5,7 @@ build:
 	cp ../dist/wasnn_ocr_bg.wasm build/
 	cp ../models/ocr/text-detection.model build/
 	cp ../models/ocr/text-recognition.model build/
+	npm run build
 
 .PHONY: clean
 clean:
