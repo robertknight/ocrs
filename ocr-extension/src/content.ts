@@ -35,8 +35,9 @@ function createTextLine(line: LineRecResult) {
     width: `${right - left}px`,
     height: `${bottom - top}px`,
 
-    // Avoid line break if word elements don't quite fit.
-    whiteSpace: "nowrap",
+    // Avoid line break if word elements don't quite fit. Also preserve spaces
+    // at the end of the line.
+    whiteSpace: "pre",
 
     // Use a fixed font. This needs to match the font used when measuring the
     // natural width of text.
@@ -52,49 +53,60 @@ function createTextLine(line: LineRecResult) {
   const context = canvas.getContext("2d")!;
   context.font = `${fixedFont.size}px ${fixedFont.family}`;
 
+  const spaceWidth = context.measureText(" ").width;
+
   // Add words to the line as inline-block elements. This allows us to create
   // normal text selection behavior while adjusting the positioning and size
   // of words to match the underlying pixels.
   let prevWordRect: DOMRect | undefined;
   let prevWordEl: HTMLElement | undefined;
   for (const word of line.words) {
-    if (prevWordEl) {
-      prevWordEl.textContent += " ";
-    }
-
     const wordRect = domRectFromRotatedRect(word.coords);
+    const leftMargin = prevWordRect
+      ? wordRect.left - prevWordRect.right - spaceWidth
+      : undefined;
+
+    // Create outer element for word. This sets the width and margin used for
+    // inline layout.
+    const wordEl = document.createElement("span");
+    Object.assign(wordEl.style, {
+      display: "inline-block",
+      marginLeft: leftMargin != null ? `${leftMargin}px` : undefined,
+      width: `${wordRect.width}px`,
+      height: `${wordRect.height}px`,
+    });
+
     const metrics = context.measureText(word.text);
     const xScale = wordRect.width / metrics.width;
     const yScale = wordRect.height / fixedFont.size;
-    const leftMargin = prevWordRect
-      ? wordRect.left - prevWordRect.right
-      : undefined;
 
-    const wordEl = document.createElement("span");
-    wordEl.textContent = word.text;
-    Object.assign(wordEl.style, {
+    // Create inner element for word. This uses a transform to make the rendered
+    // size match the underlying text pixels. The transform doesn't affect
+    // layout. The inner and outer elements are separated so that the scale
+    // transform is not applied to the hit box for the outer element, as that
+    // would make the hit box's size `(width * xScale, height * yScale)`, which
+    // can interfere with selection of subsequent words.
+    const wordInner = document.createElement("span");
+    wordInner.textContent = word.text;
+    Object.assign(wordInner.style, {
       display: "inline-block",
       transformOrigin: "top left",
-
-      marginLeft: leftMargin != null ? `${leftMargin}px` : undefined,
-
-      // Set the size of this box used for layout. This does not affect the
-      // rendered size.
-      width: `${wordRect.width}px`,
-      height: `${wordRect.height}px`,
-
-      // Scale content using a transform. This affects the rendered size of the
-      // text, but not the layout.
       transform: `scale(${xScale}, ${yScale})`,
-
-      // Don't collapse whitespace at end of words, so it remains visible in
-      // selected text.
-      whiteSpace: "pre",
     });
+    wordEl.append(wordInner);
 
     lineEl.append(wordEl);
     prevWordEl = wordEl;
     prevWordRect = wordRect;
+
+    // Add space between words. We add this even after the last word in a line
+    // to ensure there is a space between the end of one line and the start of
+    // the next in a multi-line selection.
+    //
+    // TODO - Adjust the rendered size of the space to make the height of
+    // selection boxes consistent across the line, and avoid gaps in the
+    // selection box.
+    lineEl.append(" ");
   }
   return lineEl;
 }
