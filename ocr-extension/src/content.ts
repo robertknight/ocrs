@@ -167,11 +167,17 @@ export function showDetectedText(lines: RotatedRect[]) {
     // Override default styles from the page.
     all: "initial",
 
-    position: "fixed",
-    top: "0",
-    left: "0",
-    right: "0",
-    bottom: "0",
+    // Position the overlay so that it fills the viewport, but scrolls with
+    // the page contents. This allows the user to read parts of the page that
+    // were OCR-ed, without disrupting the selection in the part that has been.
+    //
+    // A known issue with this is that text in the overlay that belongs to
+    // fixed-positioned elements won't scroll as the page moves.
+    position: "absolute",
+    top: `${document.documentElement.scrollTop}px`,
+    left: `${document.documentElement.scrollLeft}px`,
+    width: `${window.innerWidth}px`,
+    height: `${window.innerHeight}px`,
     zIndex: 9999,
   });
 
@@ -359,6 +365,8 @@ export function showDetectedText(lines: RotatedRect[]) {
     }
   };
 
+  const removeOverlay = () => canvasContainer.remove();
+
   // Dismiss overlay when user clicks on the backdrop, but not inside text or
   // other UI elements in the overlay.
   canvas.onclick = (e) => {
@@ -381,7 +389,16 @@ export function showDetectedText(lines: RotatedRect[]) {
       return;
     }
 
-    // Remove the overlay.
-    canvasContainer.remove();
+    removeOverlay();
   };
+
+  // When the window is resized, the document layout will change and the OCR
+  // boxes will likely be incorrect, so just remove the overlay at that point.
+  window.addEventListener(
+    "resize",
+    () => {
+      removeOverlay();
+    },
+    { once: true },
+  );
 }
