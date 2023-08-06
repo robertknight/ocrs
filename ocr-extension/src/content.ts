@@ -161,7 +161,7 @@ export function showDetectedText(lines: RotatedRect[]) {
   //  3) `null` if recognition completed but no text was recognized
   const textCache = new Map<
     number,
-    LineRecResult | Promise<LineRecResult> | null
+    LineRecResult | Promise<LineRecResult | null> | null
   >();
 
   const linePaths = lines.map((line) => {
@@ -189,17 +189,61 @@ export function showDetectedText(lines: RotatedRect[]) {
   // Track the coordinates where drag operations start.
   const primaryButtonPressed = (e: MouseEvent) => e.buttons & 1;
   let dragStartAt: { x: number; y: number } | null = null;
-  canvas.onmousedown = (e) => {
+  canvasContainer.onmousedown = (e) => {
     if (!dragStartAt) {
       dragStartAt = { x: e.x, y: e.y };
     }
   };
-  canvas.onmouseenter = (e) => {
+  canvasContainer.onmouseup = (e) => {
+    dragStartAt = null;
+  };
+  canvasContainer.onmouseenter = (e) => {
     if (primaryButtonPressed(e)) {
       dragStartAt = { x: e.x, y: e.y };
     } else {
       dragStartAt = null;
     }
+  };
+
+  const recognizeLine = async (
+    lineIndex: number,
+  ): Promise<LineRecResult | null> => {
+    const cachedResult = textCache.get(lineIndex);
+    if (cachedResult !== undefined) {
+      return cachedResult;
+    }
+
+    const recPromise: Promise<LineRecResult | null> =
+      chrome.runtime.sendMessage({
+        method: "recognizeText",
+        args: {
+          lineIndex,
+        },
+      });
+    textCache.set(lineIndex, recPromise);
+
+    const recResult = await recPromise;
+    textCache.set(lineIndex, recResult);
+
+    if (!recResult) {
+      return recResult;
+    }
+
+    const lineEl = createTextLine(recResult);
+    lineEl.setAttribute("data-line-index", lineIndex.toString());
+
+    // Insert line such that the DOM order is the same as the output order
+    // from the OCR lib, which produces lines in reading order. This makes
+    // text selection across lines and columns flow properly, provided that
+    // the OCR lib detected the reading order correctly.
+    const successor = Array.from(textLines.entries())
+      .sort((a, b) => a[0] - b[0])
+      .find(([entryLine, entryEl]) => entryLine >= lineIndex);
+    const successorNode = successor ? successor[1] : null;
+    textLayer.insertBefore(lineEl, successorNode);
+    textLines.set(lineIndex, lineEl);
+
+    return recResult;
   };
 
   // Create the hidden text layer in which the user can select text.
@@ -208,49 +252,42 @@ export function showDetectedText(lines: RotatedRect[]) {
 
   const textLines = new Map<number, HTMLElement>();
 
-  let prevLineIndex = -1;
+  let prevLine = -1;
   canvas.onmousemove = async (e) => {
-    const lineIndex = lineIndexFromPoint(e.clientX, e.clientY);
-    if (lineIndex === prevLineIndex) {
+    const currentLine = lineIndexFromPoint(e.clientX, e.clientY);
+    if (currentLine === prevLine) {
       return;
     }
-    prevLineIndex = lineIndex;
+    prevLine = currentLine;
 
-    // Recognize text for this line if we haven't done so.
-    //
-    // TODO: We currently recognize text only for the line under the mouse. If
-    // the user makes a multi-line selection the mouse might not hover each
-    // line between the start and end points individually. We should ensure all
-    // lines between the drag start and drag end points are recognized.
-
-    let cachedResult = textCache.get(lineIndex);
-    if (cachedResult === undefined) {
-      const recPromise: Promise<LineRecResult> = chrome.runtime.sendMessage({
-        method: "recognizeText",
-        args: {
-          lineIndex,
-        },
-      });
-      textCache.set(lineIndex, recPromise);
-
-      const recResult = await recPromise;
-      const lineEl = createTextLine(recResult);
-      lineEl.setAttribute("data-line-index", lineIndex.toString());
-
-      // Insert line such that the DOM order is the same as the output order
-      // from the OCR lib, which produces lines in reading order. This makes
-      // text selection across lines and columns flow properly, provided that
-      // the OCR lib detected the reading order correctly.
-      const successor = Array.from(textLines.entries())
-        .sort((a, b) => a[0] - b[0])
-        .find(([entryLine, entryEl]) => entryLine >= lineIndex);
-      const successorNode = successor ? successor[1] : null;
-      textLayer.insertBefore(lineEl, successorNode);
-
-      textLines.set(lineIndex, lineEl);
-      textCache.set(lineIndex, recResult);
-      cachedResult = recResult;
+    if (currentLine === -1) {
+      return;
     }
+
+    // Recognize text for the current line, if just hovering, or all lines
+    // between the start and end point of the current drag operation if a mouse
+    // button is pressed.
+    const dragStartLine = dragStartAt
+      ? lineIndexFromPoint(dragStartAt.x, dragStartAt.y)
+      : currentLine;
+    const startLine =
+      dragStartLine !== -1 ? Math.min(dragStartLine, currentLine) : currentLine;
+    const endLine =
+      dragStartLine !== -1 ? Math.max(dragStartLine, currentLine) : currentLine;
+
+    for (let lineIndex = startLine; lineIndex <= endLine; lineIndex++) {
+      if (!textCache.has(lineIndex)) {
+        // TODO: We currently recognize a single line at a time here, but
+        // recognition is more efficient if batches of similarly-sized lines
+        // are recognized at once.
+        recognizeLine(lineIndex);
+      }
+    }
+
+    // TODO - Once recognition completes, update the selection. Currently if
+    // a mouse move occurs over an un-recognized line with the mouse held down,
+    // the cursor will change from pointer to I-Beam once recognition completes,
+    // but the selection won't update until the mouse is moved slightly.
   };
 
   // Dismiss overlay when user clicks on the backdrop, but not inside text or
