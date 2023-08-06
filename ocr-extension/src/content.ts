@@ -69,7 +69,7 @@ const fixedFont = {
 /**
  * Create a line of selectable text in the transparent text layer.
  */
-function createTextLine(line: LineRecResult) {
+function createTextLine(line: LineRecResult): HTMLElement {
   const lineEl = document.createElement("div");
   lineEl.className = "text-line";
 

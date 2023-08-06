@@ -25,7 +25,7 @@ let ocrResources: Promise<OCRResources> | undefined;
  *
  * This must be called before `OcrEngine*` classes can be constructed.
  */
-async function initOCREngine() {
+async function initOCREngine(): Promise<OCRResources> {
   if (ocrResources) {
     return ocrResources;
   }
