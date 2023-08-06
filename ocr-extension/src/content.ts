@@ -365,7 +365,12 @@ export function showDetectedText(lines: RotatedRect[]) {
     }
   };
 
-  const removeOverlay = () => canvasContainer.remove();
+  // Signal used to remove global listeners etc. when overlay is removed.
+  const overlayRemoved = new AbortController();
+  const removeOverlay = () => {
+    canvasContainer.remove();
+    overlayRemoved.abort();
+  };
 
   // Dismiss overlay when user clicks on the backdrop, but not inside text or
   // other UI elements in the overlay.
@@ -399,6 +404,16 @@ export function showDetectedText(lines: RotatedRect[]) {
     () => {
       removeOverlay();
     },
-    { once: true },
+    { signal: overlayRemoved.signal },
+  );
+
+  document.addEventListener(
+    "keyup",
+    (e) => {
+      if (e.key === "Escape") {
+        removeOverlay();
+      }
+    },
+    { signal: overlayRemoved.signal },
   );
 }
