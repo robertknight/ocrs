@@ -144,14 +144,9 @@ export function showDetectedText(lines: RotatedRect[]) {
     bottom: "0",
   });
 
-  // Dismiss overlay when user clicks on the backdrop, but not inside text or
-  // other UI elements in the overlay.
-  canvas.onclick = (e) => {
-    canvasContainer.remove();
-  };
-
   canvasContainer.shadowRoot!.append(canvas);
 
+  // Draw text layer backdrop.
   const ctx = canvas.getContext("2d")!;
   ctx.fillStyle = "rgb(0 0 0 / .3)";
   ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
@@ -220,5 +215,49 @@ export function showDetectedText(lines: RotatedRect[]) {
       textCache.set(lineIndex, recResult);
       cachedResult = recResult;
     }
+  };
+
+  const primaryButtonPressed = (e: MouseEvent) => e.buttons & 1;
+  let dragStartAt: { x: number; y: number } | null = null;
+  canvas.onmousedown = (e) => {
+    if (!dragStartAt) {
+      dragStartAt = { x: e.x, y: e.y };
+    }
+  };
+  canvas.onmouseenter = (e) => {
+    if (primaryButtonPressed(e)) {
+      dragStartAt = { x: e.x, y: e.y };
+    } else {
+      dragStartAt = null;
+    }
+  };
+
+  // Dismiss overlay when user clicks on the backdrop, but not inside text or
+  // other UI elements in the overlay.
+  canvas.onclick = (e) => {
+    // Don't dismiss the overlay if the user started a drag action (eg. to
+    // select text), but happened to finish on the canvas instead of inside a
+    // text element.
+    if (dragStartAt) {
+      const dragDist = Math.sqrt(
+        (e.x - dragStartAt.x) ** 2 + (e.y - dragStartAt.y) ** 2,
+      );
+      if (dragDist >= 20) {
+        return;
+      }
+    }
+
+    const canvasClientRect = canvas.getBoundingClientRect();
+    const canvasX = e.x - canvasClientRect.left;
+    const canvasY = e.y - canvasClientRect.top;
+
+    // Don't dismiss the overlay if the user clicks inside a line that hasn't
+    // been recognized yet.
+    if (linePaths.some((lp) => ctx.isPointInPath(lp, canvasX, canvasY))) {
+      return;
+    }
+
+    // Remove the overlay.
+    canvasContainer.remove();
   };
 }
