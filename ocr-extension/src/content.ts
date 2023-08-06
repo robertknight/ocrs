@@ -155,8 +155,14 @@ export function showDetectedText(lines: RotatedRect[]) {
   ctx.globalCompositeOperation = "destination-out";
   ctx.fillStyle = "white";
 
-  // Map of line index to recognized text.
-  const textCache = new Map<number, LineRecResult | null>();
+  // Map of line index to:
+  //  1) Recognized text, if recognition is complete
+  //  2) A promise if recognition is in progress
+  //  3) `null` if recognition completed but no text was recognized
+  const textCache = new Map<
+    number,
+    LineRecResult | Promise<LineRecResult> | null
+  >();
 
   const linePaths = lines.map((line) => {
     const [x0, y0, x1, y1, x2, y2, x3, y3] = line;
@@ -173,31 +179,61 @@ export function showDetectedText(lines: RotatedRect[]) {
     ctx.fill(path);
   }
 
+  const lineIndexFromPoint = (clientX: number, clientY: number) => {
+    const canvasRect = canvas.getBoundingClientRect();
+    const canvasX = clientX - canvasRect.left;
+    const canvasY = clientY - canvasRect.top;
+    return linePaths.findIndex((lp) => ctx.isPointInPath(lp, canvasX, canvasY));
+  };
+
+  // Track the coordinates where drag operations start.
+  const primaryButtonPressed = (e: MouseEvent) => e.buttons & 1;
+  let dragStartAt: { x: number; y: number } | null = null;
+  canvas.onmousedown = (e) => {
+    if (!dragStartAt) {
+      dragStartAt = { x: e.x, y: e.y };
+    }
+  };
+  canvas.onmouseenter = (e) => {
+    if (primaryButtonPressed(e)) {
+      dragStartAt = { x: e.x, y: e.y };
+    } else {
+      dragStartAt = null;
+    }
+  };
+
+  // Create the hidden text layer in which the user can select text.
   const textLayer = document.createElement("div");
   canvasContainer.shadowRoot!.append(textLayer);
 
-  // Map of line index to text line element.
   const textLines = new Map<number, HTMLElement>();
 
   let prevLineIndex = -1;
   canvas.onmousemove = async (e) => {
-    const lineIndex = linePaths.findIndex((lp) =>
-      ctx.isPointInPath(lp, e.clientX, e.clientY),
-    );
+    const lineIndex = lineIndexFromPoint(e.clientX, e.clientY);
     if (lineIndex === prevLineIndex) {
       return;
     }
     prevLineIndex = lineIndex;
 
+    // Recognize text for this line if we haven't done so.
+    //
+    // TODO: We currently recognize text only for the line under the mouse. If
+    // the user makes a multi-line selection the mouse might not hover each
+    // line between the start and end points individually. We should ensure all
+    // lines between the drag start and drag end points are recognized.
+
     let cachedResult = textCache.get(lineIndex);
     if (cachedResult === undefined) {
-      const recResult: LineRecResult = await chrome.runtime.sendMessage({
+      const recPromise: Promise<LineRecResult> = chrome.runtime.sendMessage({
         method: "recognizeText",
         args: {
           lineIndex,
         },
       });
+      textCache.set(lineIndex, recPromise);
 
+      const recResult = await recPromise;
       const lineEl = createTextLine(recResult);
       lineEl.setAttribute("data-line-index", lineIndex.toString());
 
@@ -217,21 +253,6 @@ export function showDetectedText(lines: RotatedRect[]) {
     }
   };
 
-  const primaryButtonPressed = (e: MouseEvent) => e.buttons & 1;
-  let dragStartAt: { x: number; y: number } | null = null;
-  canvas.onmousedown = (e) => {
-    if (!dragStartAt) {
-      dragStartAt = { x: e.x, y: e.y };
-    }
-  };
-  canvas.onmouseenter = (e) => {
-    if (primaryButtonPressed(e)) {
-      dragStartAt = { x: e.x, y: e.y };
-    } else {
-      dragStartAt = null;
-    }
-  };
-
   // Dismiss overlay when user clicks on the backdrop, but not inside text or
   // other UI elements in the overlay.
   canvas.onclick = (e) => {
@@ -247,13 +268,10 @@ export function showDetectedText(lines: RotatedRect[]) {
       }
     }
 
-    const canvasClientRect = canvas.getBoundingClientRect();
-    const canvasX = e.x - canvasClientRect.left;
-    const canvasY = e.y - canvasClientRect.top;
-
     // Don't dismiss the overlay if the user clicks inside a line that hasn't
     // been recognized yet.
-    if (linePaths.some((lp) => ctx.isPointInPath(lp, canvasX, canvasY))) {
+    const lineIndex = lineIndexFromPoint(e.clientX, e.clientY);
+    if (lineIndex !== -1) {
       return;
     }
 
