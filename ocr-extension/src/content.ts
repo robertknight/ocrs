@@ -1,6 +1,53 @@
 import type { LineRecResult, RotatedRect, WordRecResult } from "./types";
 
 /**
+ * See https://developer.mozilla.org/en-US/docs/Web/API/CaretPosition
+ */
+type TextPosition = { textNode: Text; offset: number };
+
+/**
+ * Return true if the point `(x, y)` is contained within `r`.
+ *
+ * The left/top edges are treated as "inside" the rect and the bottom/right
+ * edges as "outside". This ensures that for adjacent rects, a point will only
+ * lie within one rect.
+ */
+function rectContains(r: DOMRect, x: number, y: number) {
+  return x >= r.left && x < r.right && y >= r.top && y < r.bottom;
+}
+
+/**
+ * Return the offset of the text character which in a {@link Text} node that is
+ * a descendant of `container`, and contains the point `(x, y)`, specified in
+ * client coordinates.
+ */
+function textPositionFromPoint(
+  container: Element,
+  x: number,
+  y: number,
+): TextPosition | null {
+  // TODO - Optimize this using `{Document, ShadowRoot}.elementsFromPoint` to
+  // filter the node list.
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  let currentNode;
+  const range = new Range();
+
+  while ((currentNode = walker.nextNode())) {
+    const text = currentNode as Text;
+    const str = text.nodeValue!;
+    for (let i = 0; i < str.length; i++) {
+      range.setStart(text, i);
+      range.setEnd(text, i + 1);
+      const charRect = range.getBoundingClientRect();
+      if (rectContains(charRect, x, y)) {
+        return { textNode: text, offset: i };
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Return the smallest axis-aligned rect that contains all corners of a
  * rotated rect.
  */
@@ -186,15 +233,22 @@ export function showDetectedText(lines: RotatedRect[]) {
     return linePaths.findIndex((lp) => ctx.isPointInPath(lp, canvasX, canvasY));
   };
 
-  // Track the coordinates where drag operations start.
+  // Track the start and end coordinates of the current mouse drag operation.
   const primaryButtonPressed = (e: MouseEvent) => e.buttons & 1;
   let dragStartAt: { x: number; y: number } | null = null;
+  let dragEndAt: { x: number; y: number } | null = null;
   canvasContainer.onmousedown = (e) => {
     if (!dragStartAt) {
       dragStartAt = { x: e.x, y: e.y };
     }
   };
+  canvasContainer.onmousemove = (e) => {
+    if (primaryButtonPressed(e)) {
+      dragEndAt = { x: e.x, y: e.y };
+    }
+  };
   canvasContainer.onmouseup = (e) => {
+    dragEndAt = null;
     dragStartAt = null;
   };
   canvasContainer.onmouseenter = (e) => {
@@ -243,6 +297,26 @@ export function showDetectedText(lines: RotatedRect[]) {
     textLayer.insertBefore(lineEl, successorNode);
     textLines.set(lineIndex, lineEl);
 
+    // If a drag operation was in progress, update the selection once text
+    // recognition is completed, to include the newly recognized text.
+    if (dragStartAt && dragEndAt) {
+      const start = textPositionFromPoint(
+        textLayer,
+        dragStartAt.x,
+        dragStartAt.y,
+      );
+      const end = textPositionFromPoint(textLayer, dragEndAt.x, dragEndAt.y);
+      const selection = document.getSelection();
+      if (selection && start && end) {
+        selection.setBaseAndExtent(
+          start.textNode,
+          start.offset,
+          end.textNode,
+          end.offset,
+        );
+      }
+    }
+
     return recResult;
   };
 
@@ -283,11 +357,6 @@ export function showDetectedText(lines: RotatedRect[]) {
         recognizeLine(lineIndex);
       }
     }
-
-    // TODO - Once recognition completes, update the selection. Currently if
-    // a mouse move occurs over an un-recognized line with the mouse held down,
-    // the cursor will change from pointer to I-Beam once recognition completes,
-    // but the selection won't update until the mouse is moved slightly.
   };
 
   // Dismiss overlay when user clicks on the backdrop, but not inside text or
