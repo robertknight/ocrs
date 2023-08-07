@@ -158,10 +158,49 @@ function createTextLine(line: LineRecResult): HTMLElement {
   return lineEl;
 }
 
+export type TextOverlay = {
+  remove(): void;
+};
+
 /**
- * Show detected text in the current tab and enable the user to select lines.
+ * Interface for the text layer in a tab to communicate with the OCR engine.
  */
-export function showDetectedText(lines: RotatedRect[]) {
+export type TextSource = {
+  /**
+   * Run recognition on a line of text and return the recognition results, or
+   * `null` if no text was recognized.
+   */
+  recognizeText(lineIndex: number): Promise<LineRecResult | null>;
+};
+
+/** The active overlay in the current document. */
+let activeOverlay: TextOverlay | null = null;
+
+/**
+ * Remove the active overlay in the current document.
+ */
+export function dismissTextOverlay() {
+  activeOverlay?.remove();
+  activeOverlay = null;
+}
+
+/**
+ * Create an overlay which shows the location of OCR-ed text in the viewport
+ * and enables the user to select and copy text from it.
+ *
+ * Only one overlay is supported in the document at a time, and if there is
+ * already an existing active overlay when this function is called, it is
+ * dismissed.
+ *
+ * @param source - Interface for communicating with the OCR engine
+ * @param lines - Locations of text lines in the page
+ */
+export function createTextOverlay(
+  source: TextSource,
+  lines: RotatedRect[],
+): TextOverlay {
+  dismissTextOverlay();
+
   const canvasContainer = document.createElement("div");
   Object.assign(canvasContainer.style, {
     // Override default styles from the page.
@@ -273,13 +312,7 @@ export function showDetectedText(lines: RotatedRect[]) {
       return cachedResult;
     }
 
-    const recPromise: Promise<LineRecResult | null> =
-      chrome.runtime.sendMessage({
-        method: "recognizeText",
-        args: {
-          lineIndex,
-        },
-      });
+    const recPromise = source.recognizeText(lineIndex);
     textCache.set(lineIndex, recPromise);
 
     const recResult = await recPromise;
@@ -416,4 +449,9 @@ export function showDetectedText(lines: RotatedRect[]) {
     },
     { signal: overlayRemoved.signal },
   );
+
+  activeOverlay = {
+    remove: removeOverlay,
+  };
+  return activeOverlay;
 }

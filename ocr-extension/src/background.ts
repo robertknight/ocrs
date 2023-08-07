@@ -6,6 +6,7 @@ import {
 } from "../build/wasnn_ocr.js";
 import type { LineRecResult, RotatedRect, WordRecResult } from "./types";
 import type * as contentModule from "./content";
+import type { TextOverlay, TextSource } from "./content";
 
 /** Interface of the various `*List` types exported by the OCR lib. */
 type ListLike<T> = {
@@ -104,10 +105,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return false;
 });
 
-async function showDetectedText(lines: RotatedRect[]) {
+// Functions called as content scripts by the background service worker.
+// These are not able to reference any external variables, except for globals
+// (eg. document, window) in the environment where they run.
+
+async function dismissTextOverlay() {
   const contentSrc = chrome.runtime.getURL("build-extension/content.js");
   const content: typeof contentModule = await import(contentSrc);
-  content.showDetectedText(lines);
+  content.dismissTextOverlay();
+}
+
+async function createTextOverlay(lines: RotatedRect[]) {
+  const contentSrc = chrome.runtime.getURL("build-extension/content.js");
+  const content: typeof contentModule = await import(contentSrc);
+  const textSrc: TextSource = {
+    recognizeText(lineIndex: number): Promise<LineRecResult | null> {
+      return chrome.runtime.sendMessage({
+        method: "recognizeText",
+        args: { lineIndex },
+      });
+    },
+  };
+  content.createTextOverlay(textSrc, lines);
 }
 
 chrome.action.onClicked.addListener(async (tab) => {
@@ -115,7 +134,11 @@ chrome.action.onClicked.addListener(async (tab) => {
     return;
   }
 
-  // TODO - Dismiss existing captured text in current tab.
+  // Remove existing overlay, if extension was already activated in current tab.
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: dismissTextOverlay,
+  });
 
   chrome.action.setBadgeText({ text: "..." });
   try {
@@ -152,14 +175,7 @@ chrome.action.onClicked.addListener(async (tab) => {
       } ms, detection ${detEnd - detStart}ms.`,
     );
 
-    chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: showDetectedText,
-      args: [lineCoords],
-    });
-
-    // TBD: How long does the Service Worker keep running? Will Chrome terminate
-    // it while recognition requests might still come from the page?
+    // Set up the callback that the text layer will use to perform recognition.
     recognizeText = async (lineIndex) => {
       const line = lines.item(lineIndex);
       if (!line) {
@@ -185,6 +201,13 @@ chrome.action.onClicked.addListener(async (tab) => {
         coords,
       };
     };
+
+    // Create the text layer in the current tab.
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: createTextOverlay,
+      args: [lineCoords],
+    });
   } finally {
     chrome.action.setBadgeText({ text: "" });
   }
