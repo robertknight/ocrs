@@ -1,8 +1,5 @@
 import type { LineRecResult, RotatedRect, WordRecResult } from "./types";
 
-/**
- * See https://developer.mozilla.org/en-US/docs/Web/API/CaretPosition
- */
 type TextPosition = { textNode: Text; offset: number };
 
 /**
@@ -17,8 +14,7 @@ function rectContains(r: DOMRect, x: number, y: number) {
 }
 
 /**
- * Return the offset of the text character which in a {@link Text} node that is
- * a descendant of `container`, and contains the point `(x, y)`, specified in
+ * Return the text node and offset of the character at the point `(x, y)` in
  * client coordinates.
  */
 function textPositionFromPoint(
@@ -235,8 +231,9 @@ export function createTextOverlay(
     // the page contents. This allows the user to read parts of the page that
     // were OCR-ed, without disrupting the selection in the part that has been.
     //
-    // A known issue with this is that text in the overlay that belongs to
-    // fixed-positioned elements won't scroll as the page moves.
+    // A known issue with this is that when the page is scrolled, text in the
+    // overlay will become mis-aligned with underlying pixels that belong to
+    // fixed-positioned elements.
     position: "absolute",
     top: `${document.documentElement.scrollTop}px`,
     left: `${document.documentElement.scrollLeft}px`,
@@ -288,7 +285,7 @@ export function createTextOverlay(
     return path;
   };
 
-  // Draw transparent line polygons.
+  // Cut out holes in the backdrop where there is detected text.
   ctx.save();
   ctx.globalCompositeOperation = "destination-out";
   ctx.fillStyle = "white";
