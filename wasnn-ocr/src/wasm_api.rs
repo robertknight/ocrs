@@ -31,7 +31,50 @@ use crate::{OcrEngine as BaseOcrEngine, OcrEngineParams, OcrInput, TextItem};
 /// `Vec<T>` to JS (see
 /// [issue](https://github.com/rustwasm/wasm-bindgen/issues/111)).
 macro_rules! make_item_list {
-    ($list_struct:ident, $item_struct:ident) => {
+    ($list_struct:ident, Option<$item_struct:ty>) => {
+        #[wasm_bindgen]
+        #[derive(Clone, Default)]
+        pub struct $list_struct {
+            items: Vec<Option<$item_struct>>,
+        }
+
+        impl $list_struct {
+            #[allow(dead_code)]
+            fn from_vec(items: Vec<Option<$item_struct>>) -> Self {
+                Self { items }
+            }
+
+            #[allow(dead_code)]
+            fn iter(&self) -> impl Iterator<Item = &Option<$item_struct>> {
+                self.items.iter()
+            }
+        }
+
+        #[wasm_bindgen]
+        impl $list_struct {
+            #[wasm_bindgen(constructor)]
+            pub fn new() -> Self {
+                Self { items: Vec::new() }
+            }
+
+            /// Add a new item to the end of the list.
+            pub fn push(&mut self, item: Option<$item_struct>) {
+                self.items.push(item.clone());
+            }
+
+            /// Return the item at a given index.
+            pub fn item(&self, index: usize) -> Option<$item_struct> {
+                self.items.get(index).cloned().flatten()
+            }
+
+            #[wasm_bindgen(getter)]
+            pub fn length(&self) -> usize {
+                self.items.len()
+            }
+        }
+    };
+
+    ($list_struct:ident, $item_struct:ty) => {
         #[wasm_bindgen]
         #[derive(Clone, Default)]
         pub struct $list_struct {
@@ -214,7 +257,7 @@ impl OcrEngine {
             .recognize_text(&image.input, &lines)
             .map_err(|e| e.to_string())?
             .into_iter()
-            .filter_map(|text_line| text_line.map(|tl| TextLine { line: tl }))
+            .map(|line| line.map(|line| TextLine { line }))
             .collect();
         Ok(TextLineList::from_vec(text_lines))
     }
@@ -245,7 +288,7 @@ impl OcrEngine {
             .recognize_text(&image.input, &lines)
             .map_err(|e| e.to_string())?
             .into_iter()
-            .filter_map(|text_line| text_line.map(|tl| TextLine { line: tl }))
+            .map(|line| line.map(|line| TextLine { line }))
             .collect();
         Ok(TextLineList::from_vec(text_lines))
     }
@@ -382,6 +425,7 @@ make_item_list!(TextWordList, TextWord);
 #[wasm_bindgen]
 #[derive(Clone)]
 pub struct TextLine {
+    // Text line, or None if no text was recognized.
     line: super::TextLine,
 }
 
@@ -392,7 +436,7 @@ impl TextLine {
     }
 
     pub fn words(&self) -> TextWordList {
-        let items = self
+        let items: Vec<TextWord> = self
             .line
             .words()
             .map(|w| TextWord {
@@ -406,4 +450,4 @@ impl TextLine {
     }
 }
 
-make_item_list!(TextLineList, TextLine);
+make_item_list!(TextLineList, Option<TextLine>);
