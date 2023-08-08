@@ -686,12 +686,10 @@ impl OcrEngine {
     /// order.
     pub fn find_text_lines(
         &self,
-        input: &OcrInput,
+        _input: &OcrInput,
         words: &[RotatedRect],
     ) -> Vec<Vec<RotatedRect>> {
-        let [_, img_height, img_width] = input.image.shape();
-        let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
-        find_text_lines(words, page_rect)
+        find_text_lines(words)
     }
 
     /// Recognize lines of text in an image.

@@ -3,8 +3,8 @@ use std::collections::BinaryHeap;
 use std::iter::zip;
 
 use wasnn_imageproc::{
-    find_contours, min_area_rect, simplify_polygon, BoundingRect, Line, Point, Rect, RetrievalMode,
-    RotatedRect, Vec2,
+    bounding_rect, find_contours, min_area_rect, simplify_polygon, BoundingRect, Line, Point, Rect,
+    RetrievalMode, RotatedRect, Vec2,
 };
 use wasnn_tensor::NdTensorView;
 
@@ -351,7 +351,11 @@ type TextLine = Vec<RotatedRect>;
 type TextParagraph = Vec<TextLine>;
 
 /// Find separators between columns.
-pub fn find_column_separators(words: &[RotatedRect], page: Rect) -> Vec<Line> {
+pub fn find_column_separators(words: &[RotatedRect]) -> Vec<Line> {
+    let Some(page_rect) = bounding_rect(words.iter()) else {
+        return Vec::new();
+    };
+
     // Estimate spacing statistics
     let mut lines = group_into_lines(words, &[]);
     lines.sort_by_key(|l| l.first().unwrap().bounding_rect().top());
@@ -401,7 +405,7 @@ pub fn find_column_separators(words: &[RotatedRect], page: Rect) -> Vec<Line> {
     let mut separator_rects = Vec::new();
     for er in max_empty_rects(
         &object_bboxes,
-        page,
+        page_rect,
         score,
         min_width.try_into().unwrap(),
         min_height,
@@ -434,8 +438,8 @@ pub fn find_column_separators(words: &[RotatedRect], page: Rect) -> Vec<Line> {
 }
 
 /// Group words into lines and sort them into reading order.
-pub fn find_text_lines(words: &[RotatedRect], page: Rect) -> Vec<Vec<RotatedRect>> {
-    let separator_lines = find_column_separators(words, page);
+pub fn find_text_lines(words: &[RotatedRect]) -> Vec<Vec<RotatedRect>> {
+    let separator_lines = find_column_separators(words);
 
     let mut lines = group_into_lines(words, &separator_lines);
 
@@ -703,7 +707,7 @@ mod tests {
 
         let rng = fastrand::Rng::with_seed(1234);
         rng.shuffle(&mut words);
-        let lines = find_text_lines(&words, page);
+        let lines = find_text_lines(&words);
 
         assert_eq!(lines.len() as i32, col_rows * 2);
         for line in lines {
