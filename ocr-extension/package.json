@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
+    "watch": "tsc --watch",
     "format": "prettier -w **/*.{md,ts}",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
