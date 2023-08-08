@@ -350,8 +350,8 @@ type TextLine = Vec<RotatedRect>;
 
 type TextParagraph = Vec<TextLine>;
 
-/// Group words into lines and sort them into reading order.
-pub fn find_text_lines(words: &[RotatedRect], page: Rect) -> Vec<Vec<RotatedRect>> {
+/// Find separators between columns.
+pub fn find_column_separators(words: &[RotatedRect], page: Rect) -> Vec<Line> {
     // Estimate spacing statistics
     let mut lines = group_into_lines(words, &[]);
     lines.sort_by_key(|l| l.first().unwrap().bounding_rect().top());
@@ -412,7 +412,6 @@ pub fn find_text_lines(words: &[RotatedRect], page: Rect) -> Vec<Vec<RotatedRect
         separator_rects.push(er);
     }
 
-    // Find lines that do not cross separators
     let separator_lines: Vec<_> = separator_rects
         .iter()
         .map(|r| {
@@ -430,6 +429,14 @@ pub fn find_text_lines(words: &[RotatedRect], page: Rect) -> Vec<Vec<RotatedRect
             }
         })
         .collect();
+
+    separator_lines
+}
+
+/// Group words into lines and sort them into reading order.
+pub fn find_text_lines(words: &[RotatedRect], page: Rect) -> Vec<Vec<RotatedRect>> {
+    let separator_lines = find_column_separators(words, page);
+
     let mut lines = group_into_lines(words, &separator_lines);
 
     // Approximate a text line by the 1D line from the center of the left
