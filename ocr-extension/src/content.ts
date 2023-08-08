@@ -107,7 +107,7 @@ function createTextLine(line: LineRecResult): HTMLElement {
   // of words to match the underlying pixels.
   let prevWordRect: DOMRect | undefined;
   let prevWordEl: HTMLElement | undefined;
-  for (const word of line.words) {
+  for (const [wordIndex, word] of line.words.entries()) {
     const wordRect = domRectFromRotatedRect(word.coords);
     const leftMargin = prevWordRect
       ? wordRect.left - prevWordRect.right - spaceWidth
@@ -153,9 +153,32 @@ function createTextLine(line: LineRecResult): HTMLElement {
     // Add space between words. We add this even after the last word in a line
     // to ensure there is a space between the end of one line and the start of
     // the next in a multi-line selection.
-    //
-    // TODO - Adjust the rendered height of the space to match the previous word.
-    lineEl.append(" ");
+    const spaceEl = document.createElement("span");
+
+    let spaceXScale = 1;
+    if (wordIndex < line.words.length - 1) {
+      const nextWordRect = domRectFromRotatedRect(
+        line.words[wordIndex + 1].coords,
+      );
+      const targetSpaceWidth = nextWordRect.left - wordRect.right;
+      spaceXScale = targetSpaceWidth / spaceWidth;
+    }
+
+    Object.assign(spaceEl.style, {
+      display: "inline-block",
+
+      // Align top of space with top of preceding word.
+      marginTop: `${wordRect.top - top}px`,
+      verticalAlign: "top",
+
+      // Scale the space to match the height of the word, and the width between
+      // the current and next words.
+      transformOrigin: "top left",
+      transform: `scale(${spaceXScale}, ${yScale})`,
+    });
+    spaceEl.textContent = " ";
+
+    lineEl.append(spaceEl);
   }
   return lineEl;
 }
