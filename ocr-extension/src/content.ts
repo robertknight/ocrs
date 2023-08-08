@@ -268,10 +268,6 @@ export function createTextOverlay(
   ctx.fillStyle = "rgb(0 0 0 / .3)";
   ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
-  // Make line polygons transparent.
-  ctx.globalCompositeOperation = "destination-out";
-  ctx.fillStyle = "white";
-
   // Map of line index to:
   //  1) Recognized text, if recognition is complete
   //  2) A promise if recognition is in progress
@@ -281,8 +277,8 @@ export function createTextOverlay(
     LineRecResult | Promise<LineRecResult | null> | null
   >();
 
-  const linePaths = lines.map((line) => {
-    const [x0, y0, x1, y1, x2, y2, x3, y3] = line;
+  const rotatedRectPath = (coords: RotatedRect) => {
+    const [x0, y0, x1, y1, x2, y2, x3, y3] = coords;
     const path = new Path2D();
     path.moveTo(x0, y0);
     path.lineTo(x1, y1);
@@ -290,11 +286,17 @@ export function createTextOverlay(
     path.lineTo(x3, y3);
     path.closePath();
     return path;
-  });
+  };
 
+  // Draw transparent line polygons.
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.fillStyle = "white";
+  const linePaths = lines.map(rotatedRectPath);
   for (const path of linePaths) {
     ctx.fill(path);
   }
+  ctx.restore();
 
   const lineIndexFromPoint = (clientX: number, clientY: number) => {
     const canvasRect = canvas.getBoundingClientRect();
