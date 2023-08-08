@@ -119,8 +119,12 @@ function createTextLine(line: LineRecResult): HTMLElement {
     Object.assign(wordEl.style, {
       display: "inline-block",
       marginLeft: leftMargin != null ? `${leftMargin}px` : undefined,
+      marginTop: `${wordRect.top - top}px`,
       width: `${wordRect.width}px`,
       height: `${wordRect.height}px`,
+
+      // Align top of word box with top of line.
+      verticalAlign: "top",
     });
 
     const metrics = context.measureText(word.text);
@@ -150,9 +154,7 @@ function createTextLine(line: LineRecResult): HTMLElement {
     // to ensure there is a space between the end of one line and the start of
     // the next in a multi-line selection.
     //
-    // TODO - Adjust the rendered size of the space to make the height of
-    // selection boxes consistent across the line, and avoid gaps in the
-    // selection box.
+    // TODO - Adjust the rendered height of the space to match the previous word.
     lineEl.append(" ");
   }
   return lineEl;
