@@ -5,7 +5,7 @@ use std::fs;
 use std::io::BufWriter;
 use std::iter::zip;
 
-use wasnn_imageproc::{draw_polygon, Point};
+use wasnn_imageproc::{draw_polygon, min_area_rect, Point};
 use wasnn_ocr::{DecodeMethod, OcrEngine, OcrEngineParams, TextItem};
 use wasnn_tensor::{Layout, NdTensor, NdTensorView, NdTensorViewMut};
 
@@ -269,18 +269,34 @@ fn main() -> Result<(), Box<dyn Error>> {
         const DARKGREEN: Rgb = [0, 100, 0];
         const DARKBLUE: Rgb = [0, 0, 139];
 
-        // Draw word bounding boxes from text detection step, grouped by line.
+        const LIGHT_GRAY: Rgb = [200, 200, 200];
+
+        let u8_to_f32 = |x: u8| x as f32 / 255.;
+
+        // Draw line bounding rects from layout analysis step.
+        for line in line_rects.iter() {
+            let line_points: Vec<_> = line
+                .iter()
+                .flat_map(|word_rect| word_rect.corners().into_iter())
+                .collect();
+            if let Some(line_rect) = min_area_rect(&line_points) {
+                painter.set_stroke(LIGHT_GRAY.map(u8_to_f32));
+                painter.draw_polygon(&line_rect.corners());
+            };
+        }
+
+        // Draw word bounding rects from text detection step, grouped by line.
         let colors = [CORAL, DARKSEAGREEN, CORNFLOWERBLUE];
         for (line, color) in zip(line_rects.iter(), colors.into_iter().cycle()) {
             for word_rect in line {
-                painter.set_stroke(color.map(|c| c as f32 / 255.));
+                painter.set_stroke(color.map(u8_to_f32));
                 painter.draw_polygon(&word_rect.corners());
             }
         }
 
-        // Draw word bounding boxes from text recognition step. These may
-        // be different as they are computed from the bounding boxes of
-        // recognized characters.
+        // Draw word bounding rects from text recognition step. These may be
+        // different as they are computed from the bounding boxes of recognized
+        // characters.
         let colors = [CRIMSON, DARKGREEN, DARKBLUE];
         for (line, color) in zip(line_texts.into_iter(), colors.into_iter().cycle()) {
             let Some(line) = line else {
@@ -288,7 +304,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 continue;
             };
             for text_word in line.words() {
-                painter.set_stroke(color.map(|c| c as f32 / 255.));
+                painter.set_stroke(color.map(u8_to_f32));
                 painter.draw_polygon(&text_word.rotated_rect().corners());
             }
         }
