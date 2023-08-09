@@ -5,9 +5,9 @@ use std::fs;
 use std::io::BufWriter;
 use std::iter::zip;
 
-use wasnn_imageproc::{draw_polygon, min_area_rect, Point};
+use wasnn_imageproc::{min_area_rect, Painter, Rgb};
 use wasnn_ocr::{DecodeMethod, OcrEngine, OcrEngineParams, TextItem};
-use wasnn_tensor::{Layout, NdTensor, NdTensorView, NdTensorViewMut};
+use wasnn_tensor::{Layout, NdTensor, NdTensorView};
 
 mod models;
 use models::{load_model, ModelSource};
@@ -158,39 +158,6 @@ trait FileErrorContext<T> {
 impl<T, E: std::fmt::Display> FileErrorContext<T> for Result<T, E> {
     fn file_error_context<P: fmt::Display>(self, context: &str, path: P) -> Result<T, String> {
         self.map_err(|err| format!("{} from \"{}\": {}", context, path, err))
-    }
-}
-
-type Rgb<T = u8> = [T; 3];
-
-/// Utility for drawing into an image tensor.
-struct Painter<'a, T> {
-    /// CHW image tensor.
-    surface: NdTensorViewMut<'a, T, 3>,
-
-    /// Stroke color for RGB channels.
-    stroke: Rgb<T>,
-}
-
-impl<'a, T: Copy + Default> Painter<'a, T> {
-    /// Create a Painter which draws into the CHW tensor `surface`.
-    fn new(surface: NdTensorViewMut<'a, T, 3>) -> Painter<'a, T> {
-        Painter {
-            surface,
-            stroke: [T::default(); 3],
-        }
-    }
-
-    /// Set the RGB color values used by the `draw_*` methods.
-    fn set_stroke(&mut self, stroke: Rgb<T>) {
-        self.stroke = stroke;
-    }
-
-    /// Draw a polygon into the surface.
-    fn draw_polygon(&mut self, points: &[Point]) {
-        for i in 0..3 {
-            draw_polygon(self.surface.slice_mut([i]), points, self.stroke[i]);
-        }
     }
 }
 
