@@ -141,6 +141,18 @@ chrome.action.onClicked.addListener(async (tab) => {
   });
 
   chrome.action.setBadgeText({ text: "..." });
+
+  const zoom = await chrome.tabs.getZoom(tab.id);
+
+  // Map coordinates from a tab screenshot to the coordinate system of the
+  // document's viewport, as seen by code running in the tab.
+  //
+  // This assumes that the screenshot was captured at regular DPI (ie. as if
+  // `window.devicePixelRatio` was 1), and so we don't need to compensate for
+  // that here.
+  const tabImageToDocumentCoords = (coords: number[]) =>
+    coords.map((c) => c / zoom);
+
   try {
     const ocrInitPromise = initOCREngine();
 
@@ -165,12 +177,8 @@ chrome.action.onClicked.addListener(async (tab) => {
     const lines = ocrEngine.detectText(ocrInput);
     const detEnd = performance.now();
 
-    const lineCoords = Array.from(listItems(lines)).map((line) =>
-      Array.from(line.rotatedRect().corners()),
-    );
-
     console.log(
-      `Detected ${lineCoords.length} lines. Capture ${
+      `Detected ${lines.length} lines. Capture ${
         captureEnd - captureStart
       } ms, detection ${detEnd - detStart}ms.`,
     );
@@ -196,13 +204,19 @@ chrome.action.onClicked.addListener(async (tab) => {
       return {
         words: words.map((word) => ({
           text: word.text(),
-          coords: Array.from(word.rotatedRect().corners()),
+          coords: tabImageToDocumentCoords(
+            Array.from(word.rotatedRect().corners()),
+          ),
         })),
-        coords,
+        coords: tabImageToDocumentCoords(coords),
       };
     };
 
     // Create the text layer in the current tab.
+    const lineCoords = Array.from(listItems(lines)).map((line) =>
+      tabImageToDocumentCoords(Array.from(line.rotatedRect().corners())),
+    );
+
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: createTextOverlay,
