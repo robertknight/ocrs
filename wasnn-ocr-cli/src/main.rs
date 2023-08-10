@@ -5,7 +5,7 @@ use std::fs;
 use std::io::BufWriter;
 use std::iter::zip;
 
-use wasnn_imageproc::{min_area_rect, Painter, Rgb};
+use wasnn_imageproc::{min_area_rect, Painter, Point, PointF, Rgb};
 use wasnn_ocr::{DecodeMethod, OcrEngine, OcrEngineParams, TextItem};
 use wasnn_tensor::{Layout, NdTensor, NdTensorView};
 
@@ -239,6 +239,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         const LIGHT_GRAY: Rgb = [200, 200, 200];
 
         let u8_to_f32 = |x: u8| x as f32 / 255.;
+        let floor_point = |p: PointF| Point::from_yx(p.y as i32, p.x as i32);
 
         // Draw line bounding rects from layout analysis step.
         for line in line_rects.iter() {
@@ -248,7 +249,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .collect();
             if let Some(line_rect) = min_area_rect(&line_points) {
                 painter.set_stroke(LIGHT_GRAY.map(u8_to_f32));
-                painter.draw_polygon(&line_rect.corners());
+                painter.draw_polygon(&line_rect.corners().map(floor_point));
             };
         }
 
@@ -257,7 +258,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         for (line, color) in zip(line_rects.iter(), colors.into_iter().cycle()) {
             for word_rect in line {
                 painter.set_stroke(color.map(u8_to_f32));
-                painter.draw_polygon(&word_rect.corners());
+                painter.draw_polygon(&word_rect.corners().map(floor_point));
             }
         }
 
@@ -272,7 +273,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             };
             for text_word in line.words() {
                 painter.set_stroke(color.map(u8_to_f32));
-                painter.draw_polygon(&text_word.rotated_rect().corners());
+                painter.draw_polygon(&text_word.rotated_rect().corners().map(floor_point));
             }
         }
 

@@ -286,7 +286,11 @@ fn prepare_text_line_batch(
 
 /// Return the bounding rectangle of the slice of a polygon with X coordinates
 /// between `min_x` and `max_x` inclusive.
-fn polygon_slice_bounding_rect(poly: Polygon<&[Point]>, min_x: i32, max_x: i32) -> Option<Rect> {
+fn polygon_slice_bounding_rect(
+    poly: Polygon<i32, &[Point]>,
+    min_x: i32,
+    max_x: i32,
+) -> Option<Rect> {
     poly.edges()
         .filter_map(|e| {
             let e = e.rightwards();
@@ -298,11 +302,13 @@ fn polygon_slice_bounding_rect(poly: Polygon<&[Point]>, min_x: i32, max_x: i32) 
 
             // Truncate edge to [min_x, max_x].
             let trunc_edge_start = e
+                .to_f32()
                 .y_for_x(min_x as f32)
                 .map(|y| Point::from_yx(y.round() as i32, min_x))
                 .unwrap_or(e.start);
 
             let trunc_edge_end = e
+                .to_f32()
                 .y_for_x(max_x as f32)
                 .map(|y| Point::from_yx(y.round() as i32, max_x))
                 .unwrap_or(e.end);
@@ -527,7 +533,9 @@ fn recognize_text_lines(
     let rec_img_height = model.input_height();
     let mut line_groups: HashMap<i32, Vec<TextRecLine>> = HashMap::new();
     for (line_index, word_rects) in lines.iter().enumerate() {
-        let line_rect = bounding_rect(word_rects.iter()).expect("line has no words");
+        let line_rect = bounding_rect(word_rects.iter())
+            .expect("line has no words")
+            .integral_bounding_rect();
         let resized_width =
             resized_line_width(line_rect.width(), line_rect.height(), rec_img_height as i32);
         let group_width = round_up(resized_width, 50);
@@ -739,7 +747,7 @@ mod tests {
     use wasnn::ops::{MaxPool, Padding, Transpose};
     use wasnn::Model;
     use wasnn::{Dimension, ModelBuilder, OpType};
-    use wasnn_imageproc::{fill_rect, BoundingRect, Rect, RotatedRect};
+    use wasnn_imageproc::{fill_rect, BoundingRect, Rect, RectF, RotatedRect};
     use wasnn_tensor::{Layout, NdTensor, Tensor};
 
     use super::{OcrEngine, OcrEngineParams};
@@ -867,12 +875,12 @@ mod tests {
     /// slightly smaller than the ground truth, in order to create a gap between
     /// adjacent boxes. The connected components in model outputs are then
     /// expanded in post-processing to recover the correct boxes.
-    fn expected_word_boxes() -> Vec<Rect> {
+    fn expected_word_boxes() -> Vec<RectF> {
         let [top, height] = [27, 25];
         [
-            Rect::from_tlhw(top, -3, height, 56),
-            Rect::from_tlhw(top, 66, height, 57),
-            Rect::from_tlhw(top, 136, height, 57),
+            Rect::from_tlhw(top, -3, height, 56).to_f32(),
+            Rect::from_tlhw(top, 66, height, 57).to_f32(),
+            Rect::from_tlhw(top, 136, height, 57).to_f32(),
         ]
         .into()
     }
@@ -909,11 +917,11 @@ mod tests {
 
         assert_eq!(words.len(), n_words);
 
-        let mut boxes: Vec<Rect> = words
+        let mut boxes: Vec<RectF> = words
             .into_iter()
             .map(|rotated_rect| rotated_rect.bounding_rect())
             .collect();
-        boxes.sort_by_key(|b| [b.top(), b.left()]);
+        boxes.sort_by_key(|b| [b.top() as i32, b.left() as i32]);
 
         assert_eq!(boxes, expected_word_boxes());
 
@@ -934,9 +942,9 @@ mod tests {
         let [top, height] = [27, 25];
         line_regions.push(
             [
-                Rect::from_tlhw(top, -3, height, 56),
-                Rect::from_tlhw(top, 66, height, 57),
-                Rect::from_tlhw(top, 136, height, 57),
+                Rect::from_tlhw(top, -3, height, 56).to_f32(),
+                Rect::from_tlhw(top, 66, height, 57).to_f32(),
+                Rect::from_tlhw(top, 136, height, 57).to_f32(),
             ]
             .map(RotatedRect::from_rect)
             .into(),

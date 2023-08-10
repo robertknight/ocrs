@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::*;
 
 use wasnn::Model;
-use wasnn_imageproc::{min_area_rect, BoundingRect, Point};
+use wasnn_imageproc::{min_area_rect, BoundingRect, PointF};
 use wasnn_tensor::{Layout, NdTensorCommon, NdTensorView};
 
 use crate::{OcrEngine as BaseOcrEngine, OcrEngineParams, OcrInput, TextItem};
@@ -340,7 +340,7 @@ pub struct RotatedRect {
 impl RotatedRect {
     /// Return an array of the X and Y coordinates of corners of this rectangle,
     /// arranged as `[x0, y0, ... x3, y3]`.
-    pub fn corners(&self) -> Vec<i32> {
+    pub fn corners(&self) -> Vec<f32> {
         self.rect
             .corners()
             .into_iter()
@@ -353,7 +353,7 @@ impl RotatedRect {
     ///
     /// The result is a `[left, top, right, bottom]` array of coordinates.
     #[wasm_bindgen(js_name = boundingRect)]
-    pub fn bounding_rect(&self) -> Vec<i32> {
+    pub fn bounding_rect(&self) -> Vec<f32> {
         let br = self.rect.bounding_rect();
         [br.left(), br.top(), br.right(), br.bottom()].into()
     }
@@ -381,7 +381,7 @@ impl DetectedLine {
 
     #[wasm_bindgen(js_name = rotatedRect)]
     pub fn rotated_rect(&self) -> RotatedRect {
-        let points: Vec<Point> = self
+        let points: Vec<PointF> = self
             .words
             .iter()
             .flat_map(|word| word.rect.corners().into_iter())

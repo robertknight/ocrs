@@ -3,8 +3,8 @@ use std::collections::BinaryHeap;
 use std::iter::zip;
 
 use wasnn_imageproc::{
-    bounding_rect, find_contours, min_area_rect, simplify_polygon, BoundingRect, Line, Point, Rect,
-    RetrievalMode, RotatedRect, Vec2,
+    bounding_rect, find_contours, min_area_rect, simplify_polygon, BoundingRect, Coord, Line,
+    LineF, Point, PointF, Rect, RetrievalMode, RotatedRect,
 };
 use wasnn_tensor::NdTensorView;
 
@@ -233,24 +233,20 @@ impl<I: Iterator<Item = Rect>> FilterOverlapping for I {
     }
 }
 
-fn vec_to_point(v: Vec2) -> Point {
-    Point::from_yx(v.y as i32, v.x as i32)
-}
-
-fn rects_separated_by_line(a: &RotatedRect, b: &RotatedRect, l: Line) -> bool {
-    let a_to_b = Line::from_endpoints(vec_to_point(a.center()), vec_to_point(b.center()));
+fn rects_separated_by_line(a: &RotatedRect, b: &RotatedRect, l: LineF) -> bool {
+    let a_to_b = LineF::from_endpoints(a.center(), b.center());
     a_to_b.intersects(l)
 }
 
-fn rightmost_edge(r: &RotatedRect) -> Line {
+fn rightmost_edge(r: &RotatedRect) -> LineF {
     let mut corners = r.corners();
-    corners.sort_by_key(|p| p.x);
+    corners.sort_by(|a, b| a.x.total_cmp(&b.x));
     Line::from_endpoints(corners[2], corners[3])
 }
 
-fn leftmost_edge(r: &RotatedRect) -> Line {
+fn leftmost_edge(r: &RotatedRect) -> LineF {
     let mut corners = r.corners();
-    corners.sort_by_key(|p| p.x);
+    corners.sort_by(|a, b| a.x.total_cmp(&b.x));
     Line::from_endpoints(corners[0], corners[1])
 }
 
@@ -260,9 +256,9 @@ fn leftmost_edge(r: &RotatedRect) -> Line {
 /// `separators` is a list of line segments that prevent the formation of
 /// lines which cross them. They can be used to specify column boundaries
 /// for example.
-pub fn group_into_lines(rects: &[RotatedRect], separators: &[Line]) -> Vec<Vec<RotatedRect>> {
+pub fn group_into_lines(rects: &[RotatedRect], separators: &[LineF]) -> Vec<Vec<RotatedRect>> {
     let mut sorted_rects: Vec<_> = rects.to_vec();
-    sorted_rects.sort_by_key(|r| r.bounding_rect().left());
+    sorted_rects.sort_by_key(|r| r.bounding_rect().left() as i32);
 
     let mut lines: Vec<Vec<_>> = Vec::new();
 
@@ -294,8 +290,8 @@ pub fn group_into_lines(rects: &[RotatedRect], separators: &[Line]) -> Vec<Vec<R
                 .filter(|(_, r)| {
                     let edge = leftmost_edge(r);
                     r.center().x > last.center().x
-                        && edge.center().x - last_edge.center().x >= -max_h_overlap
-                        && last_edge.vertical_overlap(edge) >= overlap_threshold
+                        && edge.center().x - last_edge.center().x >= -max_h_overlap as f32
+                        && last_edge.vertical_overlap(edge) >= overlap_threshold as f32
                         && !separators
                             .iter()
                             .any(|&s| rects_separated_by_line(last, r, s))
@@ -330,7 +326,8 @@ pub fn find_connected_component_rects(
     find_contours(mask, RetrievalMode::External)
         .iter()
         .filter_map(|poly| {
-            let simplified = simplify_polygon(poly, 2. /* epsilon */);
+            let float_points: Vec<_> = poly.iter().map(|p| p.to_f32()).collect();
+            let simplified = simplify_polygon(&float_points, 2. /* epsilon */);
 
             min_area_rect(&simplified).map(|mut rect| {
                 rect.resize(
@@ -352,19 +349,21 @@ type TextParagraph = Vec<TextLine>;
 
 /// Find separators between columns.
 pub fn find_column_separators(words: &[RotatedRect]) -> Vec<Rect> {
-    let Some(page_rect) = bounding_rect(words.iter()) else {
+    let Some(page_rect) = bounding_rect(words.iter()).map(|br| br.integral_bounding_rect()) else {
         return Vec::new();
     };
 
     // Estimate spacing statistics
     let mut lines = group_into_lines(words, &[]);
-    lines.sort_by_key(|l| l.first().unwrap().bounding_rect().top());
+    lines.sort_by_key(|l| l.first().unwrap().bounding_rect().top().round() as i32);
 
     let mut all_word_spacings = Vec::new();
     for line in lines.iter() {
         if line.len() > 1 {
             let mut spacings: Vec<_> = zip(line.iter(), line.iter().skip(1))
-                .map(|(cur, next)| next.bounding_rect().left() - cur.bounding_rect().right())
+                .map(|(cur, next)| {
+                    (next.bounding_rect().left() - cur.bounding_rect().right()).round() as i32
+                })
                 .collect();
             spacings.sort();
             all_word_spacings.extend_from_slice(&spacings);
@@ -399,7 +398,10 @@ pub fn find_column_separators(words: &[RotatedRect]) -> Vec<Rect> {
     };
 
     // Find separators between columns and articles.
-    let object_bboxes: Vec<_> = words.iter().map(|r| r.bounding_rect()).collect();
+    let object_bboxes: Vec<_> = words
+        .iter()
+        .map(|r| r.bounding_rect().integral_bounding_rect())
+        .collect();
     let min_width = (median_word_spacing * 3) / 2;
     let min_height = (3 * median_height.max(0)) as u32;
 
@@ -422,8 +424,8 @@ pub fn find_text_lines(words: &[RotatedRect]) -> Vec<Vec<RotatedRect>> {
         .map(|r| {
             let center = r.center();
             Line::from_endpoints(
-                Point::from_yx(r.top(), center.x),
-                Point::from_yx(r.bottom(), center.x),
+                Point::from_yx(r.top(), center.x).to_f32(),
+                Point::from_yx(r.bottom(), center.x).to_f32(),
             )
         })
         .collect();
@@ -432,7 +434,7 @@ pub fn find_text_lines(words: &[RotatedRect]) -> Vec<Vec<RotatedRect>> {
 
     // Approximate a text line by the 1D line from the center of the left
     // edge of the first word, to the center of the right edge of the last word.
-    let midpoint_line = |words: &[RotatedRect]| -> Line {
+    let midpoint_line = |words: &[RotatedRect]| -> LineF {
         assert!(!words.is_empty());
         Line::from_endpoints(
             words.first().unwrap().bounding_rect().left_edge().center(),
@@ -441,10 +443,10 @@ pub fn find_text_lines(words: &[RotatedRect]) -> Vec<Vec<RotatedRect>> {
     };
 
     // Sort lines by vertical position.
-    lines.sort_by_key(|words| midpoint_line(words).center().y);
+    lines.sort_by_key(|words| midpoint_line(words).center().y as i32);
 
     let is_separated_by =
-        |line_a: &[RotatedRect], line_b: &[RotatedRect], separators: &[Line]| -> bool {
+        |line_a: &[RotatedRect], line_b: &[RotatedRect], separators: &[LineF]| -> bool {
             let mid_a = midpoint_line(line_a);
             let mid_b = midpoint_line(line_b);
             let a_to_b = Line::from_endpoints(mid_a.center(), mid_b.center());
@@ -479,7 +481,7 @@ pub fn find_text_lines(words: &[RotatedRect]) -> Vec<Vec<RotatedRect>> {
 }
 
 /// Normalize a line so that it's endpoints are sorted from top to bottom.
-fn downwards_line(l: Line) -> Line {
+fn downwards_line<T: Coord>(l: Line<T>) -> Line<T> {
     if l.start.y <= l.end.y {
         l
     } else {
@@ -500,14 +502,16 @@ fn downwards_line(l: Line) -> Line {
 pub fn line_polygon(words: &[RotatedRect]) -> Vec<Point> {
     let mut polygon = Vec::new();
 
+    let floor_point = |p: PointF| Point::from_yx(p.y as i32, p.x as i32);
+
     // Add points from top edges, in left-to-right order.
     for word_rect in words.iter() {
         let (left, right) = (
             downwards_line(leftmost_edge(word_rect)),
             downwards_line(rightmost_edge(word_rect)),
         );
-        polygon.push(left.start);
-        polygon.push(right.start);
+        polygon.push(floor_point(left.start));
+        polygon.push(floor_point(right.start));
     }
 
     // Add points from bottom edges, in right-to-left order.
@@ -516,8 +520,8 @@ pub fn line_polygon(words: &[RotatedRect]) -> Vec<Point> {
             downwards_line(leftmost_edge(word_rect)),
             downwards_line(rightmost_edge(word_rect)),
         );
-        polygon.push(right.end);
-        polygon.push(left.end);
+        polygon.push(floor_point(right.end));
+        polygon.push(floor_point(left.end));
     }
 
     polygon
@@ -525,7 +529,9 @@ pub fn line_polygon(words: &[RotatedRect]) -> Vec<Point> {
 
 #[cfg(test)]
 mod tests {
-    use wasnn_imageproc::{fill_rect, BoundingRect, Point, Polygon, Rect, RotatedRect, Vec2};
+    use wasnn_imageproc::{
+        fill_rect, BoundingRect, Point, Polygon, Rect, RectF, RotatedRect, Vec2,
+    };
     use wasnn_tensor::NdTensor;
 
     use super::max_empty_rects;
@@ -689,7 +695,7 @@ mod tests {
             .iter()
             .chain(right_col.iter())
             .copied()
-            .map(RotatedRect::from_rect)
+            .map(|r| RotatedRect::from_rect(r.to_f32()))
             .collect();
 
         let rng = fastrand::Rng::with_seed(1234);
@@ -700,19 +706,19 @@ mod tests {
         for line in lines {
             assert_eq!(line.len() as i32, col_words);
 
-            let bounding_rect: Option<Rect> = line.iter().fold(None, |br, r| match br {
+            let bounding_rect: Option<RectF> = line.iter().fold(None, |br, r| match br {
                 Some(br) => Some(br.union(r.bounding_rect())),
                 None => Some(r.bounding_rect()),
             });
             let (line_height, line_width) = bounding_rect
                 .map(|br| (br.height(), br.width()))
-                .unwrap_or((0, 0));
+                .unwrap_or((0., 0.));
 
             // FIXME - The actual width/heights vary by one pixel and hence not
             // all match the expected size. Investigate why this happens.
-            assert!((line_height - word_h).abs() <= 1);
+            assert!((line_height - word_h as f32).abs() <= 1.);
             let expected_width = col_words * (word_w + word_gap) - word_gap;
-            assert!((line_width - expected_width).abs() <= 1);
+            assert!((line_width - expected_width as f32).abs() <= 1.);
         }
     }
 
@@ -720,7 +726,7 @@ mod tests {
     fn test_line_polygon() {
         let words: Vec<RotatedRect> = (0..5)
             .map(|i| {
-                let center = Vec2::from_yx(10., i as f32 * 20.);
+                let center = Point::from_yx(10., i as f32 * 20.);
                 let width = 10.;
                 let height = 5.;
 
@@ -739,7 +745,11 @@ mod tests {
 
         assert!(poly.is_simple());
         for word in words {
-            assert!(poly.contains_pixel(word.bounding_rect().center()));
+            let center = word.bounding_rect().center();
+            assert!(poly.contains_pixel(Point::from_yx(
+                center.y.round() as i32,
+                center.x.round() as i32
+            )));
         }
     }
 }

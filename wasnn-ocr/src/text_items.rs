@@ -1,7 +1,7 @@
 use std::fmt;
 use std::fmt::Write;
 
-use wasnn_imageproc::{bounding_rect, min_area_rect, Rect, RotatedRect, Vec2};
+use wasnn_imageproc::{bounding_rect, min_area_rect, Point, Rect, RotatedRect, Vec2};
 
 /// A non-empty sequence of recognized characters ([TextChar]) that constitute a
 /// logical unit of a document such as a word or line.
@@ -16,7 +16,12 @@ pub trait TextItem {
 
     /// Return the oriented bounding rectangle of all characters in this item.
     fn rotated_rect(&self) -> RotatedRect {
-        let points: Vec<_> = self.chars().iter().flat_map(|c| c.rect.corners()).collect();
+        let points: Vec<_> = self
+            .chars()
+            .iter()
+            .flat_map(|c| c.rect.corners())
+            .map(Point::to_f32)
+            .collect();
         let rect = min_area_rect(&points).expect("expected valid rect");
 
         // Give the rect a predictable orientation. We currently assume the
@@ -139,11 +144,11 @@ mod tests {
         );
 
         let rot_rect = word.rotated_rect();
-        assert_eq!(rot_rect.bounding_rect(), word.bounding_rect());
+        assert_eq!(rot_rect.bounding_rect(), word.bounding_rect().to_f32());
         assert_eq!(rot_rect.up_axis(), Vec2::from_yx(-1., 0.));
         assert_eq!(
             word.rotated_rect().corners(),
-            [(25, 30), (25, 0), (0, 0), (0, 30)].map(|(y, x)| Point { x, y })
+            [(25, 30), (25, 0), (0, 0), (0, 30)].map(|(y, x)| Point::from_yx(y as f32, x as f32))
         );
 
         // TODO - Add cases for non-horizontal words.
