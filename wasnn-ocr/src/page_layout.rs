@@ -351,7 +351,7 @@ type TextLine = Vec<RotatedRect>;
 type TextParagraph = Vec<TextLine>;
 
 /// Find separators between columns.
-pub fn find_column_separators(words: &[RotatedRect]) -> Vec<Line> {
+pub fn find_column_separators(words: &[RotatedRect]) -> Vec<Rect> {
     let Some(page_rect) = bounding_rect(words.iter()) else {
         return Vec::new();
     };
@@ -402,8 +402,8 @@ pub fn find_column_separators(words: &[RotatedRect]) -> Vec<Line> {
     let object_bboxes: Vec<_> = words.iter().map(|r| r.bounding_rect()).collect();
     let min_width = (median_word_spacing * 3) / 2;
     let min_height = (3 * median_height.max(0)) as u32;
-    let mut separator_rects = Vec::new();
-    for er in max_empty_rects(
+
+    max_empty_rects(
         &object_bboxes,
         page_rect,
         score,
@@ -412,34 +412,21 @@ pub fn find_column_separators(words: &[RotatedRect]) -> Vec<Line> {
     )
     .filter_overlapping(0.5)
     .take(80)
-    {
-        separator_rects.push(er);
-    }
-
-    let separator_lines: Vec<_> = separator_rects
-        .iter()
-        .map(|r| {
-            let center = r.center();
-            if r.height() > r.width() {
-                Line::from_endpoints(
-                    Point::from_yx(r.top(), center.x),
-                    Point::from_yx(r.bottom(), center.x),
-                )
-            } else {
-                Line::from_endpoints(
-                    Point::from_yx(center.y, r.left()),
-                    Point::from_yx(center.y, r.right()),
-                )
-            }
-        })
-        .collect();
-
-    separator_lines
+    .collect()
 }
 
 /// Group words into lines and sort them into reading order.
 pub fn find_text_lines(words: &[RotatedRect]) -> Vec<Vec<RotatedRect>> {
-    let separator_lines = find_column_separators(words);
+    let separator_lines: Vec<_> = find_column_separators(words)
+        .iter()
+        .map(|r| {
+            let center = r.center();
+            Line::from_endpoints(
+                Point::from_yx(r.top(), center.x),
+                Point::from_yx(r.bottom(), center.x),
+            )
+        })
+        .collect();
 
     let mut lines = group_into_lines(words, &separator_lines);
 
