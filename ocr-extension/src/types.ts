@@ -9,6 +9,10 @@ export type WordRecResult = {
   coords: RotatedRect;
 };
 
+/**
+ * Serializable version of the text line recognition result (`TextLine`) from
+ * the OCR engine.
+ */
 export type LineRecResult = {
   words: WordRecResult[];
   coords: RotatedRect;

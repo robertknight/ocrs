@@ -180,7 +180,20 @@ function createTextLine(line: LineRecResult): HTMLElement {
 }
 
 export type TextOverlay = {
+  /** A signal that fires when the overlay is removed. */
+  dismissed: AbortSignal;
+
+  /** Remove the overlay. */
   remove(): void;
+
+  /**
+   * Set the recognized text for a line, or `null` if no text is found.
+   *
+   * This can be used by the OCR engine to supply recognition results before
+   * they have been requested as a result of eg. the user hovering a line,
+   * avoiding latency when recognition is needed later on.
+   */
+  setLineText(lineIndex: number, recResult: LineRecResult | null): void;
 };
 
 /**
@@ -221,6 +234,43 @@ export function createTextOverlay(
   lines: RotatedRect[],
 ): TextOverlay {
   dismissTextOverlay();
+
+  // Pending recognition requests. These are processed in LIFO order as
+  // requests are triggered in response to user interactions (eg. hovering a
+  // text line) and so we want to give priority to the most recently hovered
+  // line.
+  const pendingRecRequests: Array<{
+    lineIndex: number;
+    resolve: (result: LineRecResult | null) => void;
+  }> = [];
+  let pendingRecTimer: number | undefined;
+
+  const flushPendingRequests = () => {
+    while (pendingRecRequests.length > 0) {
+      const req = pendingRecRequests.pop()!;
+      source.recognizeText(req.lineIndex).then((result) => req.resolve(result));
+    }
+    pendingRecTimer = undefined;
+  };
+
+  // Schedule recognition of a line. We buffer requests that happen close
+  // together and process them in LIFO order.
+  const scheduleRecognition = (lineIndex: number) => {
+    let resolve;
+    const recResult = new Promise<LineRecResult | null>((resolve_) => {
+      resolve = resolve_;
+    });
+
+    pendingRecRequests.push({ lineIndex, resolve: resolve! });
+    clearTimeout(pendingRecTimer);
+    // nb. Node typings for `setTimeout` are incorrectly being used here.
+    pendingRecTimer = setTimeout(
+      flushPendingRequests,
+      300,
+    ) as unknown as number;
+
+    return recResult;
+  };
 
   const canvasContainer = document.createElement("div");
   Object.assign(canvasContainer.style, {
@@ -328,22 +378,14 @@ export function createTextOverlay(
     }
   };
 
-  const recognizeLine = async (
-    lineIndex: number,
-  ): Promise<LineRecResult | null> => {
-    const cachedResult = textCache.get(lineIndex);
-    if (cachedResult !== undefined) {
-      return cachedResult;
-    }
-
-    const recPromise = source.recognizeText(lineIndex);
-    textCache.set(lineIndex, recPromise);
-
-    const recResult = await recPromise;
+  /**
+   * Save recognition results for a line and, if not null, create the
+   * transparent text line allowing the user to select text.
+   */
+  const initTextLine = (lineIndex: number, recResult: LineRecResult | null) => {
     textCache.set(lineIndex, recResult);
-
     if (!recResult) {
-      return recResult;
+      return;
     }
 
     const lineEl = createTextLine(recResult);
@@ -379,7 +421,23 @@ export function createTextOverlay(
         );
       }
     }
+  };
 
+  // Perform on-demand recognition when the user hovers a line of text that has
+  // not yet been recognized.
+  const recognizeLine = async (
+    lineIndex: number,
+  ): Promise<LineRecResult | null> => {
+    const cachedResult = textCache.get(lineIndex);
+    if (cachedResult !== undefined) {
+      return cachedResult;
+    }
+
+    const recPromise = scheduleRecognition(lineIndex);
+    textCache.set(lineIndex, recPromise);
+
+    const recResult = await recPromise;
+    initTextLine(lineIndex, recResult);
     return recResult;
   };
 
@@ -424,10 +482,12 @@ export function createTextOverlay(
 
   // Signal used to remove global listeners etc. when overlay is removed.
   const overlayRemoved = new AbortController();
-  const removeOverlay = () => {
+  overlayRemoved.signal.addEventListener("abort", () => {
     canvasContainer.remove();
-    overlayRemoved.abort();
-  };
+    clearTimeout(pendingRecTimer);
+  });
+
+  const removeOverlay = () => overlayRemoved.abort();
 
   // Dismiss overlay when user clicks on the backdrop, but not inside text or
   // other UI elements in the overlay.
@@ -475,6 +535,13 @@ export function createTextOverlay(
   );
 
   activeOverlay = {
+    dismissed: overlayRemoved.signal,
+    setLineText: (lineIndex: number, recResult: LineRecResult) => {
+      if (textCache.has(lineIndex)) {
+        return;
+      }
+      initTextLine(lineIndex, recResult);
+    },
     remove: removeOverlay,
   };
   return activeOverlay;
