@@ -107,6 +107,14 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
+ * Content script function that tests if the tab is displaying Chrome's native
+ * PDF viewer.
+ */
+function tabIsPDFViewer() {
+  return document.querySelector('embed[type="application/pdf"]') !== null;
+}
+
+/**
  * Content script function that removes the overlay in the current tab.
  */
 async function dismissTextOverlay() {
@@ -260,7 +268,16 @@ chrome.action.onClicked.addListener(async (tab) => {
 
   chrome.action.setBadgeText({ text: "..." });
 
-  const zoom = await chrome.tabs.getZoom(tab.id);
+  const [isPDF] = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: tabIsPDFViewer,
+  });
+
+  // Get the zoom level of the tab. Tab image coordinates need to be scaled by
+  // 1/zoom to map them to document coordinates. Chrome's PDF viewer is a
+  // special case because the zoom level applies to the embedded native viewer,
+  // but not the HTML document which contains it.
+  const zoom = isPDF ? 1 : await chrome.tabs.getZoom(tab.id);
 
   // Cache of line number to recognition result for the current image.
   const recognizedLines = new Map<number, LineRecResult | null>();
