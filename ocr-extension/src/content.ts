@@ -266,7 +266,7 @@ export function createTextOverlay(
     // nb. Node typings for `setTimeout` are incorrectly being used here.
     pendingRecTimer = setTimeout(
       flushPendingRequests,
-      300,
+      100,
     ) as unknown as number;
 
     return recResult;
