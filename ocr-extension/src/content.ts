@@ -289,6 +289,13 @@ export function createTextOverlay(
     left: `${document.documentElement.scrollLeft}px`,
     width: `${window.innerWidth}px`,
     height: `${window.innerHeight}px`,
+
+    // Display overlay above other elements.
+    //
+    // FIXME: This won't work if there are elements displayed in the top layer
+    // [1] or the page uses higher Z-indices.
+    //
+    // [1] https://developer.mozilla.org/en-US/docs/Glossary/Top_layer
     zIndex: 9999,
   });
 
