@@ -24,33 +24,33 @@ type OCRResources = {
 let ocrResources: Promise<OCRResources> | undefined;
 
 /**
- * Initialize the OCR engine and load models.
- *
- * This must be called before `OcrEngine*` classes can be constructed.
+ * Create an OCR engine and configure its models.
  */
-async function initOCREngine(): Promise<OCRResources> {
-  if (ocrResources) {
-    return ocrResources;
+async function createOCREngine(): Promise<OcrEngine> {
+  if (!ocrResources) {
+    // Initialize OCR library and fetch models on first use.
+    const init = async () => {
+      const [ocrBin, detectionModel, recognitionModel] = await Promise.all([
+        fetch("../build/wasnn_ocr_bg.wasm").then((r) => r.arrayBuffer()),
+        fetch("../build/text-detection.model").then((r) => r.arrayBuffer()),
+        fetch("../build/text-recognition.model").then((r) => r.arrayBuffer()),
+      ]);
+
+      await initOcrLib(ocrBin);
+
+      return {
+        detectionModel: new Uint8Array(detectionModel),
+        recognitionModel: new Uint8Array(recognitionModel),
+      };
+    };
+    ocrResources = init();
   }
 
-  const init = async () => {
-    const [ocrBin, detectionModel, recognitionModel] = await Promise.all([
-      fetch("../build/wasnn_ocr_bg.wasm").then((r) => r.arrayBuffer()),
-      fetch("../build/text-detection.model").then((r) => r.arrayBuffer()),
-      fetch("../build/text-recognition.model").then((r) => r.arrayBuffer()),
-    ]);
-
-    await initOcrLib(ocrBin);
-
-    return {
-      detectionModel: new Uint8Array(detectionModel),
-      recognitionModel: new Uint8Array(recognitionModel),
-    };
-  };
-
-  ocrResources = init();
-
-  return ocrResources;
+  const { detectionModel, recognitionModel } = await ocrResources;
+  const ocrInit = new OcrEngineInit();
+  ocrInit.setDetectionModel(detectionModel);
+  ocrInit.setRecognitionModel(recognitionModel);
+  return new OcrEngine(ocrInit);
 }
 
 /**
@@ -88,22 +88,6 @@ function* listItems<T>(list: ListLike<T>): Generator<T> {
     yield list.item(i)!;
   }
 }
-
-let recognizeText:
-  | ((lineIndexes: number[]) => Array<LineRecResult | null>)
-  | undefined;
-
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (
-    request.method === "recognizeText" &&
-    typeof recognizeText === "function"
-  ) {
-    const [result] = recognizeText([request.args.lineIndex]);
-    sendResponse(result);
-    return true;
-  }
-  return false;
-});
 
 function* chunks<T>(items: T[], chunkSize: number) {
   for (let i = 0; i < items.length; i += chunkSize) {
@@ -156,17 +140,15 @@ async function createTextOverlay(lines: RotatedRect[]) {
     }
   };
   chrome.runtime.onMessage.addListener(onMessage);
+
+  // Handle removal of overlay.
   overlay.dismissed.addEventListener("abort", () => {
     chrome.runtime.onMessage.removeListener(onMessage);
+    chrome.runtime.sendMessage({
+      method: "cancelRecognition",
+      time: Date.now(),
+    });
   });
-}
-
-async function createOCREngine() {
-  const { detectionModel, recognitionModel } = await initOCREngine();
-  const ocrInit = new OcrEngineInit();
-  ocrInit.setDetectionModel(detectionModel);
-  ocrInit.setRecognitionModel(recognitionModel);
-  return new OcrEngine(ocrInit);
 }
 
 /**
@@ -212,6 +194,46 @@ function textLineToLineRecResult(
   return result;
 }
 
+/**
+ * Map of tab ID to controller for canceling recognitions in tabs where OCR
+ * recognition is currently active.
+ */
+const cancelControllers = new Map<number, AbortController>();
+
+/**
+ * Callback for recognizing lines on-demand in tab where extension has most
+ * recently been activated.
+ *
+ * TODO - There should be one of these per tab.
+ */
+let recognizeText:
+  | ((lineIndexes: number[]) => Array<LineRecResult | null>)
+  | undefined;
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (
+    request.method === "recognizeText" &&
+    typeof recognizeText === "function"
+  ) {
+    const [result] = recognizeText([request.args.lineIndex]);
+    sendResponse(result);
+    return true;
+  }
+  if (
+    request.method === "cancelRecognition" &&
+    typeof sender.tab?.id === "number"
+  ) {
+    const tabId = sender.tab.id;
+    const cancelCtrl = cancelControllers.get(tabId);
+    if (cancelCtrl) {
+      cancelCtrl.abort();
+      cancelControllers.delete(tabId);
+    }
+    return true;
+  }
+  return false;
+});
+
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id) {
     return;
@@ -221,6 +243,19 @@ chrome.action.onClicked.addListener(async (tab) => {
   await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     func: dismissTextOverlay,
+  });
+
+  // Cancel background text recognition for existing overlay.
+  let cancelCtrl = cancelControllers.get(tab.id);
+  if (cancelCtrl) {
+    cancelCtrl.abort();
+    cancelControllers.delete(tab.id);
+  }
+
+  cancelCtrl = new AbortController();
+  cancelControllers.set(tab.id, cancelCtrl);
+  cancelCtrl.signal.addEventListener("abort", () => {
+    chrome.action.setBadgeText({ text: "" });
   });
 
   chrome.action.setBadgeText({ text: "..." });
@@ -308,11 +343,13 @@ chrome.action.onClicked.addListener(async (tab) => {
       args: [lineCoords],
     });
   } finally {
-    chrome.action.setBadgeText({ text: "" });
+    if (!cancelCtrl.signal.aborted) {
+      chrome.action.setBadgeText({ text: "" });
+    }
   }
 
   // Eagerly recognize lines, before the text layer has requested them.
-  if (lines) {
+  if (lines && !cancelCtrl.signal.aborted) {
     chrome.action.setBadgeText({ text: "~" });
 
     // Sort lines by width, so lines in each batch are likely to have similar
@@ -328,11 +365,19 @@ chrome.action.onClicked.addListener(async (tab) => {
     // Recognize lines in batches.
     const chunkSize = 4;
     for (let indices of chunks(range(0, sortedLines.length), chunkSize)) {
+      if (cancelCtrl.signal.aborted) {
+        break;
+      }
+
       // Skip any lines that were already recognized in response to a request
       // from the tab.
       indices = indices.filter((idx) => !recognizedLines.has(idx));
 
       const recResults = await recognizeText(indices);
+      if (cancelCtrl.signal.aborted) {
+        break;
+      }
+
       for (let i = 0; i < indices.length; i++) {
         chrome.tabs.sendMessage(tab.id, {
           type: "textRecognized",
@@ -346,6 +391,8 @@ chrome.action.onClicked.addListener(async (tab) => {
       await delay(0);
     }
 
-    chrome.action.setBadgeText({ text: "" });
+    if (!cancelCtrl.signal.aborted) {
+      chrome.action.setBadgeText({ text: "" });
+    }
   }
 });
