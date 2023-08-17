@@ -107,7 +107,7 @@ function createTextLine(line: LineRecResult): HTMLElement {
     const wordRect = domRectFromRotatedRect(word.coords);
     const leftMargin = prevWordRect
       ? wordRect.left - prevWordRect.right - spaceWidth
-      : undefined;
+      : wordRect.left - left;
 
     // Create outer element for word. This sets the width and margin used for
     // inline layout.
