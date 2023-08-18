@@ -219,6 +219,26 @@ export function dismissTextOverlay() {
 }
 
 /**
+ * Return the container element into which the text overlay should be placed.
+ *
+ * By default this is the document body, but if there is a top layer [1] active,
+ * the overlay needs to be placed in that to be visible.
+ *
+ * [1] https://developer.mozilla.org/en-US/docs/Glossary/Top_layer
+ */
+function getOverlayParent() {
+  if (document.fullscreenElement) {
+    return document.fullscreenElement;
+  }
+
+  // Other ways of creating a top layer that are not yet handled:
+  // - `HTMLDialogElement.showModal()`
+  // - `HTMLElement.showPopover()`
+
+  return document.body;
+}
+
+/**
  * Create an overlay which shows the location of OCR-ed text in the viewport
  * and enables the user to select and copy text from it.
  *
@@ -290,19 +310,16 @@ export function createTextOverlay(
     width: `${window.innerWidth}px`,
     height: `${window.innerHeight}px`,
 
-    // Display overlay above other elements.
-    //
-    // FIXME: This won't work if there are elements displayed in the top layer
-    // [1] or the page uses higher Z-indices.
-    //
-    // [1] https://developer.mozilla.org/en-US/docs/Glossary/Top_layer
+    // Display overlay above other elements. If there is a top layer active,
+    // then we also need to ensure the element is added to that layer.
     zIndex: 9999,
   });
 
   // Use a shadow root to insulate children from page styles.
   canvasContainer.attachShadow({ mode: "open" });
 
-  document.body.append(canvasContainer);
+  const overlayParent = getOverlayParent();
+  overlayParent.append(canvasContainer);
 
   const canvas = document.createElement("canvas");
   canvas.width = window.innerWidth;
