@@ -347,8 +347,11 @@ type TextLine = Vec<RotatedRect>;
 
 type TextParagraph = Vec<TextLine>;
 
-/// Find separators between columns.
-pub fn find_column_separators(words: &[RotatedRect]) -> Vec<Rect> {
+/// Find separators between text blocks.
+///
+/// This includes separators between columns, as well as between sections (eg.
+/// headings and article contents).
+pub fn find_block_separators(words: &[RotatedRect]) -> Vec<Rect> {
     let Some(page_rect) = bounding_rect(words.iter()).map(|br| br.integral_bounding_rect()) else {
         return Vec::new();
     };
@@ -419,7 +422,8 @@ pub fn find_column_separators(words: &[RotatedRect]) -> Vec<Rect> {
 
 /// Group words into lines and sort them into reading order.
 pub fn find_text_lines(words: &[RotatedRect]) -> Vec<Vec<RotatedRect>> {
-    let separator_lines: Vec<_> = find_column_separators(words)
+    let separators = find_block_separators(words);
+    let vertical_separators: Vec<_> = separators
         .iter()
         .map(|r| {
             let center = r.center();
@@ -430,7 +434,18 @@ pub fn find_text_lines(words: &[RotatedRect]) -> Vec<Vec<RotatedRect>> {
         })
         .collect();
 
-    let mut lines = group_into_lines(words, &separator_lines);
+    let horizontal_separators: Vec<_> = separators
+        .iter()
+        .map(|r| {
+            let center = r.center();
+            Line::from_endpoints(
+                Point::from_yx(center.y, r.left()).to_f32(),
+                Point::from_yx(center.y, r.right()).to_f32(),
+            )
+        })
+        .collect();
+
+    let mut lines = group_into_lines(words, &vertical_separators);
 
     // Approximate a text line by the 1D line from the center of the left
     // edge of the first word, to the center of the right edge of the last word.
@@ -445,13 +460,10 @@ pub fn find_text_lines(words: &[RotatedRect]) -> Vec<Vec<RotatedRect>> {
     // Sort lines by vertical position.
     lines.sort_by_key(|words| midpoint_line(words).center().y as i32);
 
-    let is_separated_by =
-        |line_a: &[RotatedRect], line_b: &[RotatedRect], separators: &[LineF]| -> bool {
-            let mid_a = midpoint_line(line_a);
-            let mid_b = midpoint_line(line_b);
-            let a_to_b = Line::from_endpoints(mid_a.center(), mid_b.center());
-            separators.iter().any(|sep| sep.intersects(a_to_b))
-        };
+    let is_separated_by = |line_a: LineF, line_b: LineF, separators: &[LineF]| -> bool {
+        let a_to_b = Line::from_endpoints(line_a.center(), line_b.center());
+        separators.iter().any(|sep| sep.intersects(a_to_b))
+    };
 
     // Group lines into paragraphs. We repeatedly take the first un-assigned
     // line as the seed for a new paragraph, and then add to that para all
@@ -462,10 +474,16 @@ pub fn find_text_lines(words: &[RotatedRect]) -> Vec<Vec<RotatedRect>> {
         let mut para = Vec::new();
         para.push(seed.clone());
 
+        let mut prev_line = midpoint_line(&seed);
+
         let mut index = 0;
         while index < lines.len() {
-            if !is_separated_by(&seed, &lines[index], &separator_lines) {
+            let candidate_line = midpoint_line(&lines[index]);
+            if prev_line.horizontal_overlap(candidate_line) > 0.
+                && !is_separated_by(prev_line, candidate_line, &horizontal_separators)
+            {
                 para.push(lines.remove(index));
+                prev_line = candidate_line;
             } else {
                 index += 1;
             }
