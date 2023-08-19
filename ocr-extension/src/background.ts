@@ -173,7 +173,10 @@ function tabImageToDocumentCoords(coords: number[], zoom: number) {
 
 /**
  * Convert a `TextLineList` from the OCR engine to a `LineRecResult` array
- * that can be serialized and send to the tab.
+ * that can be serialized and sent to the tab.
+ *
+ * @param zoom - The tab's zoom level, as returned by `chrome.tabs.getZoom`
+ * @param coords - Coordinates of the text lines from text detection
  */
 function textLineToLineRecResult(
   lines: TextLineList,
@@ -203,13 +206,13 @@ function textLineToLineRecResult(
 }
 
 /**
- * Map of tab ID to controller for canceling recognitions in tabs where OCR
- * recognition is currently active.
+ * Map of tab ID to controller for canceling background OCR, in tabs where this
+ * is currently active.
  */
 const cancelControllers = new Map<number, AbortController>();
 
 /**
- * Callback for recognizing lines on-demand in tab where extension has most
+ * Callback for recognizing lines on-demand in tabs where extension has most
  * recently been activated.
  *
  * TODO - There should be one of these per tab.
@@ -286,6 +289,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   let lines: DetectedLineList;
 
   try {
+    // Init OCR engine concurrently with capturing tab image.
     const ocrEnginePromise = createOCREngine();
 
     const captureStart = performance.now();
