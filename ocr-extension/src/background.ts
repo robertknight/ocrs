@@ -8,7 +8,7 @@ import {
 } from "../build/wasnn_ocr.js";
 import type { LineRecResult, RotatedRect, WordRecResult } from "./types";
 import type * as contentModule from "./content";
-import type { TextOverlay, TextSource } from "./content";
+import type { TextOverlay, TextOverlayOptions } from "./content";
 
 /** Interface of the various `*List` types exported by the OCR lib. */
 type ListLike<T> = {
@@ -126,10 +126,12 @@ async function dismissTextOverlay() {
 /**
  * Content script function that creates an overlay in the current tab.
  */
-async function createTextOverlay(lines: RotatedRect[]) {
+async function createTextOverlay(lineCoords: RotatedRect[]) {
   const contentSrc = chrome.runtime.getURL("build-extension/content.js");
   const content: typeof contentModule = await import(contentSrc);
-  const textSrc: TextSource = {
+  const overlayOptions: TextOverlayOptions = {
+    lineCoords,
+
     // Perform on-demand recognition of a text line.
     recognizeText(lineIndex: number): Promise<LineRecResult | null> {
       return chrome.runtime.sendMessage({
@@ -139,7 +141,7 @@ async function createTextOverlay(lines: RotatedRect[]) {
       });
     },
   };
-  const overlay = content.createTextOverlay(textSrc, lines);
+  const overlay = content.createTextOverlay(overlayOptions);
 
   // Receive eagerly recognized text from the OCR engine.
   const onMessage = (message: any, sender: any) => {
@@ -250,11 +252,74 @@ chrome.action.onClicked.addListener(async (tab) => {
     return;
   }
 
+  // True if the tab is using Chrome's native PDF viewer.
+  let isPDF = false;
+
+  // The tab in which the screenshot and text overlay are displayed, if we can't
+  // show the overlay directly in the tab where the extension was activated.
+  let screenshotTab: chrome.tabs.Tab | null = null;
+
+  // The tab screenshot, if captured as part of creating `screenshotTab`.
+  let tabImage: ImageData | null = null;
+
+  // Determine whether this tab has content that needs special handling.
+  try {
+    const [isPDFResult] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: tabIsPDFViewer,
+    });
+    isPDF = isPDFResult.result;
+  } catch (err) {
+    // If the script failed to run, this may be because:
+    //
+    // 1. It is a tab which does not allow content scripts, even with `activeTab`
+    //    permissions (eg. `chrome://` URLs).
+    // 2. The page is using a sandbox origin (see
+    //    https://bugs.chromium.org/p/chromium/issues/detail?id=1407986)
+    //
+    // Try to capture a screenshot instead and open that in a new tab with an
+    // overlay.
+    chrome.action.setBadgeText({ text: "..." });
+    try {
+      // TODO - Capture a HiDPI image here since we're going to show this
+      // directly to the user.
+      tabImage = await captureTabImage();
+      const screenshotTabURL = new URL("/screenshot.html", location.href);
+      screenshotTabURL.searchParams.set("url", tab.url ?? "");
+      screenshotTab = await chrome.tabs.create({
+        openerTabId: tab.id,
+        url: screenshotTabURL.href,
+      });
+      chrome.tabs.sendMessage(screenshotTab.id!, {
+        type: "imageLoaded",
+        image: {
+          width: tabImage.width,
+          height: tabImage.height,
+          data: Array.from(tabImage.data),
+        },
+      });
+    } catch (err) {
+      // We can't even capture a screenshot :( - Just show an error.
+      const errorTabURL = new URL("/error.html", location.href);
+      errorTabURL.searchParams.set("url", tab.url ?? "");
+      chrome.tabs.create({
+        openerTabId: tab.id,
+        url: errorTabURL.href,
+      });
+      console.warn("Unable to capture tab image:", err);
+      return;
+    } finally {
+      chrome.action.setBadgeText({ text: "" });
+    }
+  }
+
   // Remove existing overlay, if extension was already activated in current tab.
-  await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: dismissTextOverlay,
-  });
+  if (!screenshotTab) {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: dismissTextOverlay,
+    });
+  }
 
   // Cancel background text recognition for existing overlay.
   let cancelCtrl = cancelControllers.get(tab.id);
@@ -271,16 +336,11 @@ chrome.action.onClicked.addListener(async (tab) => {
 
   chrome.action.setBadgeText({ text: "..." });
 
-  const [isPDF] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: tabIsPDFViewer,
-  });
-
   // Get the zoom level of the tab. Tab image coordinates need to be scaled by
   // 1/zoom to map them to document coordinates. Chrome's PDF viewer is a
   // special case because the zoom level applies to the embedded native viewer,
   // but not the HTML document which contains it.
-  const zoom = isPDF ? 1 : await chrome.tabs.getZoom(tab.id);
+  const zoom = isPDF || screenshotTab ? 1 : await chrome.tabs.getZoom(tab.id);
 
   // Cache of line number to recognition result for the current image.
   const recognizedLines = new Map<number, LineRecResult | null>();
@@ -293,7 +353,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     const ocrEnginePromise = createOCREngine();
 
     const captureStart = performance.now();
-    const image = await captureTabImage();
+    const image = tabImage ?? (await captureTabImage());
     const captureEnd = performance.now();
 
     const ocrEngine = await ocrEnginePromise;
@@ -358,11 +418,18 @@ chrome.action.onClicked.addListener(async (tab) => {
       tabImageToDocumentCoords(Array.from(line.rotatedRect().corners()), zoom),
     );
 
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: createTextOverlay,
-      args: [lineCoords],
-    });
+    if (screenshotTab) {
+      chrome.tabs.sendMessage(screenshotTab.id!, {
+        type: "createTextOverlay",
+        lineCoords,
+      });
+    } else {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: createTextOverlay,
+        args: [lineCoords],
+      });
+    }
   } finally {
     if (!cancelCtrl.signal.aborted) {
       chrome.action.setBadgeText({ text: "" });
@@ -400,7 +467,8 @@ chrome.action.onClicked.addListener(async (tab) => {
       }
 
       for (let i = 0; i < indices.length; i++) {
-        chrome.tabs.sendMessage(tab.id, {
+        const targetTab = screenshotTab?.id ?? tab.id;
+        chrome.tabs.sendMessage(targetTab, {
           type: "textRecognized",
           lineIndex: indices[i],
           recResult: recResults[i],

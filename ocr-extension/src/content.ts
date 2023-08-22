@@ -197,14 +197,31 @@ export type TextOverlay = {
 };
 
 /**
- * Interface for the text layer in a tab to communicate with the OCR engine.
+ * Configuration for the text overlay.
  */
-export type TextSource = {
+export type TextOverlayOptions = {
+  /** Coordinates of detected text lines. */
+  lineCoords: RotatedRect[];
+
   /**
-   * Run recognition on a line of text and return the recognition results, or
-   * `null` if no text was recognized.
+   * Callback to run recognition on a line of text and return the recognition
+   * results, or `null` if no text was recognized.
    */
   recognizeText(lineIndex: number): Promise<LineRecResult | null>;
+
+  /**
+   * A custom container for the overlay. This should be a positioned element,
+   * which the overlay will fill. If not specified, the overlay is sized to fill
+   * the viewport and placed either in `document.body` or the top layer element
+   * (eg. the fullscreen element) if there is one.
+   */
+  container?: HTMLElement;
+
+  /**
+   * Whether the overlay is automatically dimissed when you click outside of
+   * it. Defaults to true.
+   */
+  autoDismiss?: boolean;
 };
 
 /** The active overlay in the current document. */
@@ -245,14 +262,13 @@ function getOverlayParent() {
  * Only one overlay is supported in the document at a time, and if there is
  * already an existing active overlay when this function is called, it is
  * dismissed.
- *
- * @param source - Interface for communicating with the OCR engine
- * @param lines - Locations of text lines in the page
  */
-export function createTextOverlay(
-  source: TextSource,
-  lines: RotatedRect[],
-): TextOverlay {
+export function createTextOverlay({
+  recognizeText,
+  lineCoords,
+  container,
+  autoDismiss = true,
+}: TextOverlayOptions): TextOverlay {
   dismissTextOverlay();
 
   // Pending recognition requests. These are processed in LIFO order as
@@ -268,7 +284,7 @@ export function createTextOverlay(
   const flushPendingRequests = () => {
     while (pendingRecRequests.length > 0) {
       const req = pendingRecRequests.pop()!;
-      source.recognizeText(req.lineIndex).then((result) => req.resolve(result));
+      recognizeText(req.lineIndex).then((result) => req.resolve(result));
     }
     pendingRecTimer = undefined;
   };
@@ -297,6 +313,21 @@ export function createTextOverlay(
     // Override default styles from the page.
     all: "initial",
 
+    // Display overlay above other elements. If there is a top layer active,
+    // then we also need to ensure the element is added to that layer.
+    zIndex: 9999,
+  });
+
+  if (container) {
+    // Make the overlay fill the custom container.
+    Object.assign(canvasContainer.style, {
+      position: "absolute",
+      top: "0",
+      left: "0",
+      right: "0",
+      bottom: "0",
+    });
+  } else {
     // Position the overlay so that it fills the viewport, but scrolls with
     // the page contents. This allows the user to read parts of the page that
     // were OCR-ed, without disrupting the selection in the part that has been.
@@ -304,21 +335,19 @@ export function createTextOverlay(
     // A known issue with this is that when the page is scrolled, text in the
     // overlay will become mis-aligned with underlying pixels that belong to
     // fixed-positioned elements.
-    position: "absolute",
-    top: `${document.documentElement.scrollTop}px`,
-    left: `${document.documentElement.scrollLeft}px`,
-    width: `${window.innerWidth}px`,
-    height: `${window.innerHeight}px`,
-
-    // Display overlay above other elements. If there is a top layer active,
-    // then we also need to ensure the element is added to that layer.
-    zIndex: 9999,
-  });
+    Object.assign(canvasContainer.style, {
+      position: "absolute",
+      top: `${document.documentElement.scrollTop}px`,
+      left: `${document.documentElement.scrollLeft}px`,
+      width: `${window.innerWidth}px`,
+      height: `${window.innerHeight}px`,
+    });
+  }
 
   // Use a shadow root to insulate children from page styles.
   canvasContainer.attachShadow({ mode: "open" });
 
-  const overlayParent = getOverlayParent();
+  const overlayParent = container ?? getOverlayParent();
   overlayParent.append(canvasContainer);
 
   const canvas = document.createElement("canvas");
@@ -363,7 +392,7 @@ export function createTextOverlay(
   ctx.save();
   ctx.globalCompositeOperation = "destination-out";
   ctx.fillStyle = "white";
-  const linePaths = lines.map(rotatedRectPath);
+  const linePaths = lineCoords.map(rotatedRectPath);
   for (const path of linePaths) {
     ctx.fill(path);
   }
@@ -512,6 +541,11 @@ export function createTextOverlay(
   });
 
   const removeOverlay = () => overlayRemoved.abort();
+  const autoDismissOverlay = () => {
+    if (autoDismiss) {
+      removeOverlay();
+    }
+  };
 
   // Dismiss overlay when user clicks on the backdrop, but not inside text or
   // other UI elements in the overlay.
@@ -535,24 +569,20 @@ export function createTextOverlay(
       return;
     }
 
-    removeOverlay();
+    autoDismissOverlay();
   };
 
   // When the window is resized, the document layout will change and the OCR
   // boxes will likely be incorrect, so just remove the overlay at that point.
-  window.addEventListener(
-    "resize",
-    () => {
-      removeOverlay();
-    },
-    { signal: overlayRemoved.signal },
-  );
+  window.addEventListener("resize", autoDismissOverlay, {
+    signal: overlayRemoved.signal,
+  });
 
   document.addEventListener(
     "keyup",
     (e) => {
       if (e.key === "Escape") {
-        removeOverlay();
+        autoDismissOverlay();
       }
     },
     { signal: overlayRemoved.signal },
