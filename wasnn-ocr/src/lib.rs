@@ -87,7 +87,7 @@ fn greyscale_image<F: Fn(f32) -> f32>(
 /// Prepare an image for use with [detect_words] and [recognize_text_lines].
 ///
 /// This converts an input CHW image with values in the range 0-1 to a greyscale
-/// image with values in the range `ZERO_VALUE` to `ZERO_VALUE + 1`.
+/// image with values in the range `BLACK_VALUE` to `BLACK_VALUE + 1`.
 fn prepare_image(image: NdTensorView<f32, 3>) -> NdTensor<f32, 3> {
     greyscale_image(image, |pixel| pixel + BLACK_VALUE)
 }
@@ -810,9 +810,9 @@ mod tests {
     /// Create a fake text recognition model.
     ///
     /// This takes an NCHW input with C=1, H=64 and returns an output with
-    /// shape `[W / 4, N, H]`. In the real model the last dimension is the
-    /// log-probability of each class label, where the value is taken directly
-    /// from the input.
+    /// shape `[W / 4, N, C]`. In the real model the last dimension is the
+    /// log-probability of each class label. In this fake we just re-interpret
+    /// each column of the input as a one-hot vector of probabilities.
     fn fake_recognition_model() -> Model {
         let mut mb = ModelBuilder::new();
         let input_id = mb.add_value(
@@ -855,7 +855,7 @@ mod tests {
         mb.add_operator(
             "transpose",
             OpType::Transpose(Transpose {
-                perm: Some(vec![1, 0, 2]),
+                perm: Some(vec![2, 0, 1]),
             }),
             &[Some(squeeze_out)],
             &[transpose_out],
@@ -930,7 +930,25 @@ mod tests {
 
     #[test]
     fn test_ocr_engine_recognize_lines() -> Result<(), Box<dyn Error>> {
-        let image = gen_test_image(3 /* n_words */);
+        let mut image = NdTensor::zeros([1, 64, 32]);
+
+        // Fill a single row of the input image.
+        //
+        // The dummy recognition model treats each column of the input as a
+        // one-hot vector of character class probabilities. Pre-processing of
+        // the input will shift values from [0, 1] to [-0.5, 0.5]. CTC decoding
+        // of the output will ignore class 0 (as it represents a CTC blank)
+        // and repeated characters.
+        //
+        // Filling a single input row with "1"s will produce a single char
+        // output where the char's index in the alphabet is the row index - 1.
+        // ie. Filling the first row produces " ", the second row "0" and so on,
+        // using the default alphabet.
+        image
+            .slice_mut::<2, 3, _>((.., 2, ..))
+            .iter_mut()
+            .for_each(|x| *x = 1.);
+
         let engine = OcrEngine::new(OcrEngineParams {
             detection_model: None,
             recognition_model: Some(fake_recognition_model()),
@@ -938,26 +956,17 @@ mod tests {
         })?;
         let input = engine.prepare_input(image.view())?;
 
+        // Create a dummy input line with a single word which fills the image.
         let mut line_regions: Vec<Vec<RotatedRect>> = Vec::new();
-        let [top, height] = [27, 25];
         line_regions.push(
-            [
-                Rect::from_tlhw(top, -3, height, 56).to_f32(),
-                Rect::from_tlhw(top, 66, height, 57).to_f32(),
-                Rect::from_tlhw(top, 136, height, 57).to_f32(),
-            ]
-            .map(RotatedRect::from_rect)
-            .into(),
+            [Rect::from_tlhw(0, 0, image.shape()[1] as i32, image.shape()[2] as i32).to_f32()]
+                .map(RotatedRect::from_rect)
+                .into(),
         );
 
         let lines = engine.recognize_text(&input, &line_regions)?;
         assert_eq!(lines.len(), line_regions.len());
 
-        // The output text here is whatever the model happened to produce for
-        // the input test image. This should be improved so that we pass inputs
-        // to `recognize_text` which generate a specific character sequence as
-        // output. For now this test just verifies that model execution and
-        // output processing runs without crashing.
         assert!(lines.get(0).is_some());
         let line = lines[0].as_ref().unwrap();
         assert_eq!(line.to_string(), "0");
