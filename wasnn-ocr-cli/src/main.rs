@@ -5,7 +5,9 @@ use std::fs;
 use std::io::BufWriter;
 use std::iter::zip;
 
-use wasnn_imageproc::{min_area_rect, Painter, Point, PointF, Rgb};
+use serde_json::json;
+
+use wasnn_imageproc::{min_area_rect, BoundingRect, Painter, Point, PointF, Rgb, RotatedRect};
 use wasnn_ocr::{DecodeMethod, OcrEngine, OcrEngineParams, TextItem};
 use wasnn_tensor::{Layout, NdTensor, NdTensorView};
 
@@ -65,6 +67,40 @@ fn image_from_tensor(tensor: NdTensorView<f32, 3>) -> Vec<u8> {
         .collect()
 }
 
+/// Generate a JSON representation of detected word boxes in an image.
+///
+/// The format here matches that used by the layout model / evaluation tools.
+fn word_boxes_json(
+    img_path: &str,
+    image: NdTensorView<f32, 3>,
+    boxes: &[RotatedRect],
+) -> serde_json::Value {
+    let word_items: Vec<_> = boxes
+        .iter()
+        .map(|wr| {
+            let br = wr.bounding_rect();
+            let coords = [br.left(), br.top(), br.right(), br.bottom()].map(|c| c.round() as i32);
+            json!({
+                "coords": coords,
+            })
+        })
+        .collect();
+
+    json!({
+        "url": img_path,
+        "resolution": {
+            "width": image.size(2),
+            "height": image.size(1),
+        },
+
+        // nb. Since we haven't got layout analysis info here, we just put all
+        // the words in one paragraph.
+        "paragraphs": [{
+            "words": serde_json::Value::Array(word_items),
+        }]
+    })
+}
+
 struct Args {
     /// Path to a text detection model.
     detection_model: Option<String>,
@@ -78,6 +114,9 @@ struct Args {
     /// Enable debug output.
     debug: bool,
 
+    /// Export word boxes from text detection to a JSON file.
+    export_boxes: Option<String>,
+
     /// Use beam search for sequence decoding.
     beam_search: bool,
 }
@@ -89,6 +128,7 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     let mut beam_search = false;
     let mut debug = false;
     let mut detection_model = None;
+    let mut export_boxes = None;
     let mut recognition_model = None;
 
     let mut parser = lexopt::Parser::from_env();
@@ -103,6 +143,9 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             }
             Long("detect-model") => {
                 detection_model = Some(parser.value()?.string()?);
+            }
+            Long("export-boxes") => {
+                export_boxes = Some(parser.value()?.string()?);
             }
             Long("rec-model") => {
                 recognition_model = Some(parser.value()?.string()?);
@@ -130,6 +173,10 @@ Options:
   --rec-model <path>
 
     Use a custom text recognition model.
+
+  --export-boxes <path>
+
+    Export detected word boxes in JSON format.
 ",
                     bin_name = parser.bin_name().unwrap_or("wasnn-ocr")
                 );
@@ -143,6 +190,7 @@ Options:
         beam_search,
         debug,
         detection_model,
+        export_boxes,
         image: values.pop_front().ok_or("missing `<image>` arg")?,
         recognition_model,
     })
@@ -210,6 +258,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let line_texts = engine.recognize_text(&ocr_input, &line_rects)?;
     for line in line_texts.iter().flatten() {
         println!("{}", line);
+    }
+
+    if let Some(boxes_path) = args.export_boxes {
+        let json_data = word_boxes_json(&args.image, color_img.view(), &word_rects);
+        let json_bytes = serde_json::to_vec_pretty(&json_data)?;
+        std::fs::write(boxes_path, &json_bytes)?;
     }
 
     if args.debug {
