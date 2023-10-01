@@ -744,7 +744,7 @@ impl OcrEngine {
 mod tests {
     use std::error::Error;
 
-    use wasnn::ops::{MaxPool, Padding, Transpose};
+    use wasnn::ops::{MaxPool, Transpose};
     use wasnn::Model;
     use wasnn::{Dimension, ModelBuilder, OpType};
     use wasnn_imageproc::{fill_rect, BoundingRect, Rect, RectF, RotatedRect};
@@ -832,7 +832,7 @@ mod tests {
             "max_pool",
             OpType::MaxPool(MaxPool {
                 kernel_size: [1, 4],
-                padding: Padding::Fixed([0, 0, 0, 0]),
+                padding: [0, 0, 0, 0].into(),
                 strides: [1, 4],
             }),
             &[Some(input_id)],
