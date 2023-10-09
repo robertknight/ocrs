@@ -111,16 +111,11 @@ fn detect_words(
         .input_ids()
         .first()
         .copied()
-        .expect("model has no inputs");
+        .ok_or("model has no inputs")?;
     let input_shape = model
         .node_info(input_id)
         .and_then(|info| info.shape())
         .ok_or("model does not specify expected input shape")?;
-    let output_id = model
-        .output_ids()
-        .first()
-        .copied()
-        .expect("model has no outputs");
 
     let [img_chans, img_height, img_width] = image.shape();
 
@@ -168,9 +163,8 @@ fn detect_words(
 
     // Run text detection model to compute a probability mask indicating whether
     // each pixel is part of a text word or not.
-    let outputs = model.run(
-        &[(input_id, (&resized_grey_img).into())],
-        &[output_id],
+    let text_mask = model.run_simple(
+        &resized_grey_img,
         if debug {
             Some(RunOptions {
                 timing: true,
@@ -183,7 +177,6 @@ fn detect_words(
 
     // Resize probability mask to original input size and apply threshold to get a
     // binary text/not-text mask.
-    let text_mask = &outputs[0].as_float_ref().unwrap();
     let text_mask = bilinear_resize(
         text_mask.slice((
             ..,
@@ -472,18 +465,17 @@ impl RecognitionModel {
 
     /// Run text recognition on an NCHW batch of text line images, and return
     /// a `[batch, seq, label]` tensor of class probabilities.
-    fn run(&self, input: NdTensor<f32, 4>) -> NdTensor<f32, 3> {
+    fn run(&self, input: NdTensor<f32, 4>) -> Result<NdTensor<f32, 3>, Box<dyn Error>> {
         let input: Tensor<f32> = input.into();
-        let rec_output = self
-            .model
-            .run(&[(self.input_id, (&input).into())], &[self.output_id], None)
-            .unwrap();
-        let mut rec_sequence = rec_output[0].as_float_ref().unwrap().to_tensor();
+        let mut rec_output =
+            self.model
+                .run(&[(self.input_id, (&input).into())], &[self.output_id], None)?;
+        let mut rec_sequence: Tensor<f32> = rec_output.remove(0).try_into()?;
 
         // Transpose from [seq, batch, class] => [batch, seq, class]
         rec_sequence.permute(&[1, 0, 2]);
 
-        rec_sequence.try_into().expect("incorrect output shape")
+        Ok(rec_sequence.nd_view().to_tensor())
     }
 }
 
@@ -582,7 +574,8 @@ fn recognize_text_lines(
                 group_width as usize,
             );
 
-            let rec_output = model.run(rec_input);
+            // TODO - Propagate errors from recognition model to caller.
+            let rec_output = model.run(rec_input).expect("recognition failed");
             let ctc_input_len = rec_output.shape()[1];
 
             // Apply CTC decoding to get the label sequence for each line.
