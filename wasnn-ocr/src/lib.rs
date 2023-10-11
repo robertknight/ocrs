@@ -161,17 +161,19 @@ fn detect_words(
 
     // Run text detection model to compute a probability mask indicating whether
     // each pixel is part of a text word or not.
-    let text_mask = model.run_simple(
-        &resized_grey_img,
-        if debug {
-            Some(RunOptions {
-                timing: true,
-                verbose: false,
-            })
-        } else {
-            None
-        },
-    )?;
+    let text_mask: Tensor<f32> = model
+        .run_one(
+            (&resized_grey_img).into(),
+            if debug {
+                Some(RunOptions {
+                    timing: true,
+                    verbose: false,
+                })
+            } else {
+                None
+            },
+        )?
+        .try_into()?;
 
     // Resize probability mask to original input size and apply threshold to get a
     // binary text/not-text mask.
