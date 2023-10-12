@@ -467,15 +467,15 @@ impl RecognitionModel {
     /// a `[batch, seq, label]` tensor of class probabilities.
     fn run(&self, input: NdTensor<f32, 4>) -> Result<NdTensor<f32, 3>, Box<dyn Error>> {
         let input: Tensor<f32> = input.into();
-        let mut rec_output =
+        let [output] =
             self.model
-                .run(&[(self.input_id, (&input).into())], &[self.output_id], None)?;
-        let mut rec_sequence: Tensor<f32> = rec_output.remove(0).try_into()?;
+                .run_n(&[(self.input_id, (&input).into())], [self.output_id], None)?;
+        let mut rec_sequence: NdTensor<f32, 3> = output.try_into()?;
 
         // Transpose from [seq, batch, class] => [batch, seq, class]
-        rec_sequence.permute(&[1, 0, 2]);
+        rec_sequence.permute([1, 0, 2]);
 
-        Ok(rec_sequence.nd_view().to_tensor())
+        Ok(rec_sequence)
     }
 }
 
