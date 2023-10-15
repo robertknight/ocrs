@@ -36,7 +36,7 @@ const DEFAULT_ALPHABET: &str = " 0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~EAB
 
 /// The value used to represent fully black pixels in OCR input images
 /// prepared by [prepare_image].
-pub const BLACK_VALUE: f32 = -0.5;
+const BLACK_VALUE: f32 = -0.5;
 
 /// Convert a CHW image into a greyscale image.
 ///

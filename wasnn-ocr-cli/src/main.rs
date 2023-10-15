@@ -58,7 +58,7 @@ fn write_image(path: &str, img: NdTensorView<f32, 3>) -> Result<(), Box<dyn Erro
     Ok(())
 }
 
-/// Convert an CHW float tensor with values in the range [0, 1] to Vec<u8>
+/// Convert an CHW float tensor with values in the range [0, 1] to `Vec<u8>`
 /// with values scaled to [0, 255].
 fn image_from_tensor(tensor: NdTensorView<f32, 3>) -> Vec<u8> {
     tensor
