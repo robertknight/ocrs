@@ -4,10 +4,11 @@ use std::error::Error;
 use rayon::prelude::*;
 
 use wasnn::ctc::{CtcDecoder, CtcHypothesis};
-use wasnn::ops::{pad, resize, CoordTransformMode, NearestMode, ResizeMode, ResizeTarget};
+use wasnn::ops::{pad, resize_image};
 use wasnn::{Dimension, Model, RunOptions};
 use wasnn_imageproc::{bounding_rect, BoundingRect, Line, Point, Polygon, Rect, RotatedRect};
-use wasnn_tensor::{Layout, NdTensor, NdTensorView, NdView, Tensor, TensorView, View};
+use wasnn_tensor::prelude::*;
+use wasnn_tensor::{NdTensor, NdTensorView, Tensor};
 
 mod log;
 pub mod page_layout;
@@ -120,17 +121,6 @@ fn detect_words(
     // Add batch dim
     let image = image.reshaped([1, img_chans, img_height, img_width]);
 
-    let bilinear_resize = |img: TensorView, height, width| {
-        let sizes = &[1, 1, height, width];
-        resize(
-            img,
-            ResizeTarget::Sizes(sizes.into()),
-            ResizeMode::Linear,
-            CoordTransformMode::default(),
-            NearestMode::default(),
-        )
-    };
-
     let (in_height, in_width) = match input_shape[..] {
         [_, _, Dimension::Fixed(h), Dimension::Fixed(w)] => (h, w),
         _ => {
@@ -157,7 +147,7 @@ fn detect_words(
     };
 
     // Resize images to the text detection model's input size.
-    let resized_grey_img = bilinear_resize(grey_img.view(), in_height as i32, in_width as i32)?;
+    let resized_grey_img = resize_image(grey_img.view(), [in_height, in_width])?;
 
     // Run text detection model to compute a probability mask indicating whether
     // each pixel is part of a text word or not.
@@ -177,15 +167,14 @@ fn detect_words(
 
     // Resize probability mask to original input size and apply threshold to get a
     // binary text/not-text mask.
-    let text_mask = bilinear_resize(
+    let text_mask = resize_image(
         text_mask.slice((
             ..,
             ..,
             ..(in_height - pad_bottom as usize),
             ..(in_width - pad_right as usize),
         )),
-        img_height as i32,
-        img_width as i32,
+        [img_height, img_width],
     )?;
     let threshold = 0.2;
     let binary_mask = text_mask.map(|prob| if *prob > threshold { 1i32 } else { 0 });
@@ -254,15 +243,11 @@ fn prepare_text_line_batch(
                 grey_chan[[in_p.y as usize, in_p.x as usize]];
         }
 
-        let resized_shape = &[1, 1, output_height as i32, line.resized_width as i32];
-        let resized_line_img = resize(
+        let resized_line_img = resize_image(
             line_img
                 .reshaped([1, 1, line_img.size(0), line_img.size(1)])
                 .as_dyn(),
-            ResizeTarget::Sizes(resized_shape.into()),
-            ResizeMode::Linear,
-            CoordTransformMode::default(),
-            NearestMode::default(),
+            [output_height, line.resized_width as usize],
         )
         .unwrap();
 
