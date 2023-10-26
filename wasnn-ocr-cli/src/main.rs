@@ -9,7 +9,8 @@ use serde_json::json;
 
 use wasnn_imageproc::{min_area_rect, BoundingRect, Painter, Point, PointF, Rgb, RotatedRect};
 use wasnn_ocr::{DecodeMethod, OcrEngine, OcrEngineParams, TextItem};
-use wasnn_tensor::{Layout, NdTensor, NdTensorView};
+use wasnn_tensor::prelude::*;
+use wasnn_tensor::{NdTensor, NdTensorView};
 
 mod models;
 use models::{load_model, ModelSource};

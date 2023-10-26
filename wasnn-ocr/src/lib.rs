@@ -726,7 +726,8 @@ mod tests {
     use wasnn::Model;
     use wasnn::{Dimension, ModelBuilder, OpType};
     use wasnn_imageproc::{fill_rect, BoundingRect, Rect, RectF, RotatedRect};
-    use wasnn_tensor::{Layout, NdTensor, Tensor};
+    use wasnn_tensor::prelude::*;
+    use wasnn_tensor::{NdTensor, Tensor};
 
     use super::{OcrEngine, OcrEngineParams};
 
