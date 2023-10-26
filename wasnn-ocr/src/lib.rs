@@ -4,8 +4,7 @@ use std::error::Error;
 use rayon::prelude::*;
 
 use wasnn::ctc::{CtcDecoder, CtcHypothesis};
-use wasnn::ops::{pad, resize_image};
-use wasnn::{Dimension, Model, RunOptions};
+use wasnn::{Dimension, FloatOperators, Model, Operators, RunOptions};
 use wasnn_imageproc::{bounding_rect, BoundingRect, Line, Point, Polygon, Rect, RotatedRect};
 use wasnn_tensor::prelude::*;
 use wasnn_tensor::{NdTensor, NdTensorView, Tensor};
@@ -141,13 +140,13 @@ fn detect_words(
     let pad_right = (in_width as i32 - img_width as i32).max(0);
     let grey_img = if pad_bottom > 0 || pad_right > 0 {
         let pads = &[0, 0, 0, 0, 0, 0, pad_bottom, pad_right];
-        pad(image.as_dyn(), &pads.into(), BLACK_VALUE)?
+        image.pad(pads.into(), BLACK_VALUE)?
     } else {
         image.as_dyn().to_tensor()
     };
 
     // Resize images to the text detection model's input size.
-    let resized_grey_img = resize_image(grey_img.view(), [in_height, in_width])?;
+    let resized_grey_img = grey_img.resize_image([in_height, in_width])?;
 
     // Run text detection model to compute a probability mask indicating whether
     // each pixel is part of a text word or not.
@@ -167,15 +166,14 @@ fn detect_words(
 
     // Resize probability mask to original input size and apply threshold to get a
     // binary text/not-text mask.
-    let text_mask = resize_image(
-        text_mask.slice((
+    let text_mask = text_mask
+        .slice((
             ..,
             ..,
             ..(in_height - pad_bottom as usize),
             ..(in_width - pad_right as usize),
-        )),
-        [img_height, img_width],
-    )?;
+        ))
+        .resize_image([img_height, img_width])?;
     let threshold = 0.2;
     let binary_mask = text_mask.map(|prob| if *prob > threshold { 1i32 } else { 0 });
 
@@ -243,13 +241,10 @@ fn prepare_text_line_batch(
                 grey_chan[[in_p.y as usize, in_p.x as usize]];
         }
 
-        let resized_line_img = resize_image(
-            line_img
-                .reshaped([1, 1, line_img.size(0), line_img.size(1)])
-                .as_dyn(),
-            [output_height, line.resized_width as usize],
-        )
-        .unwrap();
+        let resized_line_img = line_img
+            .reshaped([1, 1, line_img.size(0), line_img.size(1)])
+            .resize_image([output_height, line.resized_width as usize])
+            .unwrap();
 
         let resized_line_img: NdTensorView<f32, 2> =
             resized_line_img.squeezed().try_into().unwrap();
