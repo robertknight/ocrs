@@ -1,6 +1,8 @@
 use wasm_bindgen::prelude::*;
 
-use wasnn::Model;
+use wasnn::ops;
+use wasnn::{Model, OpRegistry};
+
 use wasnn_imageproc::{min_area_rect, BoundingRect, PointF};
 use wasnn_tensor::prelude::*;
 use wasnn_tensor::NdTensorView;
@@ -120,18 +122,49 @@ macro_rules! make_item_list {
 }
 
 /// Options for constructing an [OcrEngine].
-#[derive(Default)]
 #[wasm_bindgen]
 pub struct OcrEngineInit {
+    op_registry: OpRegistry,
     detection_model: Option<Model>,
     recognition_model: Option<Model>,
+}
+
+impl Default for OcrEngineInit {
+    fn default() -> OcrEngineInit {
+        OcrEngineInit::new()
+    }
 }
 
 #[wasm_bindgen]
 impl OcrEngineInit {
     #[wasm_bindgen(constructor)]
     pub fn new() -> OcrEngineInit {
+        let mut reg = OpRegistry::new();
+
+        // Register all the operators the OCR models currently use.
+        reg.register_op::<ops::Add>();
+        reg.register_op::<ops::AveragePool>();
+        reg.register_op::<ops::Cast>();
+        reg.register_op::<ops::Concat>();
+        reg.register_op::<ops::ConstantOfShape>();
+        reg.register_op::<ops::Conv>();
+        reg.register_op::<ops::ConvTranspose>();
+        reg.register_op::<ops::GRU>();
+        reg.register_op::<ops::Gather>();
+        reg.register_op::<ops::LogSoftmax>();
+        reg.register_op::<ops::MatMul>();
+        reg.register_op::<ops::MaxPool>();
+        reg.register_op::<ops::Pad>();
+        reg.register_op::<ops::Relu>();
+        reg.register_op::<ops::Reshape>();
+        reg.register_op::<ops::Shape>();
+        reg.register_op::<ops::Sigmoid>();
+        reg.register_op::<ops::Slice>();
+        reg.register_op::<ops::Transpose>();
+        reg.register_op::<ops::Unsqueeze>();
+
         OcrEngineInit {
+            op_registry: reg,
             detection_model: None,
             recognition_model: None,
         }
@@ -140,7 +173,7 @@ impl OcrEngineInit {
     /// Load a model for text detection.
     #[wasm_bindgen(js_name = setDetectionModel)]
     pub fn set_detection_model(&mut self, data: &[u8]) -> Result<(), String> {
-        let model = Model::load(data)?;
+        let model = Model::load_with_ops(data, &self.op_registry)?;
         self.detection_model = Some(model);
         Ok(())
     }
@@ -148,7 +181,7 @@ impl OcrEngineInit {
     /// Load a model for text recognition.
     #[wasm_bindgen(js_name = setRecognitionModel)]
     pub fn set_recognition_model(&mut self, data: &[u8]) -> Result<(), String> {
-        let model = Model::load(data)?;
+        let model = Model::load_with_ops(data, &self.op_registry)?;
         self.recognition_model = Some(model);
         Ok(())
     }
@@ -172,6 +205,7 @@ impl OcrEngine {
         let OcrEngineInit {
             detection_model,
             recognition_model,
+            op_registry: _op_registry,
         } = init;
         let engine = BaseOcrEngine::new(OcrEngineParams {
             detection_model,
