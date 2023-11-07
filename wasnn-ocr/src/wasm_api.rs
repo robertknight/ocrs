@@ -173,7 +173,7 @@ impl OcrEngineInit {
     /// Load a model for text detection.
     #[wasm_bindgen(js_name = setDetectionModel)]
     pub fn set_detection_model(&mut self, data: &[u8]) -> Result<(), String> {
-        let model = Model::load_with_ops(data, &self.op_registry)?;
+        let model = Model::load_with_ops(data, &self.op_registry).map_err(|e| e.to_string())?;
         self.detection_model = Some(model);
         Ok(())
     }
@@ -181,7 +181,7 @@ impl OcrEngineInit {
     /// Load a model for text recognition.
     #[wasm_bindgen(js_name = setRecognitionModel)]
     pub fn set_recognition_model(&mut self, data: &[u8]) -> Result<(), String> {
-        let model = Model::load_with_ops(data, &self.op_registry)?;
+        let model = Model::load_with_ops(data, &self.op_registry).map_err(|e| e.to_string())?;
         self.recognition_model = Some(model);
         Ok(())
     }
