@@ -919,7 +919,7 @@ mod tests {
         // ie. Filling the first row produces " ", the second row "0" and so on,
         // using the default alphabet.
         image
-            .slice_mut::<2, 3, _>((.., 2, ..))
+            .slice_mut::<2, _>((.., 2, ..))
             .iter_mut()
             .for_each(|x| *x = 1.);
 
