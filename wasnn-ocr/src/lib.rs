@@ -218,7 +218,7 @@ fn prepare_text_line_batch(
     output_width: usize,
 ) -> NdTensor<f32, 4> {
     let mut output = NdTensor::zeros([lines.len(), 1, output_height, output_width]);
-    output.data_mut().fill(BLACK_VALUE);
+    output.apply(|_| BLACK_VALUE);
 
     // Page rect adjusted to only contain coordinates that are valid for
     // indexing into the input image.
@@ -230,7 +230,7 @@ fn prepare_text_line_batch(
         let line_rect = line.region.bounding_rect();
         let mut line_img =
             NdTensor::zeros([line_rect.height() as usize, line_rect.width() as usize]);
-        line_img.data_mut().fill(BLACK_VALUE);
+        line_img.apply(|_| BLACK_VALUE);
 
         for in_p in line.region.fill_iter() {
             let out_p = Point::from_yx(in_p.y - line_rect.top(), in_p.x - line_rect.left());
