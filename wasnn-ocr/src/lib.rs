@@ -157,6 +157,7 @@ fn detect_words(
                 Some(RunOptions {
                     timing: true,
                     verbose: false,
+                    ..Default::default()
                 })
             } else {
                 None
