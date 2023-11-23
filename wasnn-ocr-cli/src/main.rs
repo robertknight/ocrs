@@ -264,7 +264,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(boxes_path) = args.export_boxes {
         let json_data = word_boxes_json(&args.image, color_img.view(), &word_rects);
         let json_bytes = serde_json::to_vec_pretty(&json_data)?;
-        std::fs::write(boxes_path, &json_bytes)?;
+        std::fs::write(boxes_path, json_bytes)?;
     }
 
     if args.debug {
