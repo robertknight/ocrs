@@ -1,20 +1,13 @@
 import {
   DetectedLine,
-  DetectedLineList,
   OcrEngine,
   OcrEngineInit,
-  TextLineList,
+  TextLine,
   default as initOcrLib,
 } from "../build/wasnn_ocr.js";
 import type { LineRecResult, RotatedRect, WordRecResult } from "./types";
 import type * as contentModule from "./content";
 import type { TextOverlay, TextOverlayOptions } from "./content";
-
-/** Interface of the various `*List` types exported by the OCR lib. */
-type ListLike<T> = {
-  length: number;
-  item(index: number): T | undefined;
-};
 
 type OCRResources = {
   detectionModel: Uint8Array;
@@ -77,16 +70,6 @@ async function captureTabImage(): Promise<ImageData> {
   const context = canvas.getContext("2d")!;
   context.drawImage(bitmap, 0, 0);
   return context.getImageData(0, 0, bitmap.width, bitmap.height);
-}
-
-/**
- * Convert a list-like object returned by the OCR library into an iterator
- * that can be used with `for ... of` or `Array.from`.
- */
-function* listItems<T>(list: ListLike<T>): Generator<T> {
-  for (let i = 0; i < list.length; i++) {
-    yield list.item(i)!;
-  }
 }
 
 function* chunks<T>(items: T[], chunkSize: number) {
@@ -181,18 +164,14 @@ function tabImageToDocumentCoords(coords: number[], zoom: number) {
  * @param coords - Coordinates of the text lines from text detection
  */
 function textLineToLineRecResult(
-  lines: TextLineList,
+  lines: TextLine[],
   zoom: number,
   coords: RotatedRect[],
 ): Array<LineRecResult | null> {
   const result: Array<LineRecResult | null> = [];
   for (let i = 0; i < lines.length; i++) {
-    const recLine = lines.item(i);
-    if (!recLine) {
-      result.push(null);
-      continue;
-    }
-    const words = Array.from(listItems(recLine.words()));
+    const recLine = lines[i];
+    const words = recLine.words();
     result.push({
       words: words.map((word) => ({
         text: word.text(),
@@ -346,7 +325,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   const recognizedLines = new Map<number, LineRecResult | null>();
 
   // List of all text lines detected in the current image.
-  let lines: DetectedLineList;
+  let lines: DetectedLine[];
 
   try {
     // Init OCR engine concurrently with capturing tab image.
@@ -378,11 +357,11 @@ chrome.action.onClicked.addListener(async (tab) => {
      * Perform recognition on a batch of lines and cache the results.
      */
     const recognizeLineBatch = (lineIndexes: number[]) => {
-      const recInput = new DetectedLineList();
+      const recInput: DetectedLine[] = [];
       const lineCoords: RotatedRect[] = [];
 
       for (const lineIndex of lineIndexes) {
-        const line = lines.item(lineIndex);
+        const line = lines[lineIndex];
         if (!line) {
           throw new Error("Invalid line number");
         }
@@ -414,7 +393,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     };
 
     // Create the text layer in the current tab.
-    const lineCoords = Array.from(listItems(lines)).map((line) =>
+    const lineCoords = lines.map((line) =>
       tabImageToDocumentCoords(Array.from(line.rotatedRect().corners()), zoom),
     );
 
@@ -447,7 +426,7 @@ chrome.action.onClicked.addListener(async (tab) => {
       const [left, top, right, bottom] = dl.rotatedRect().boundingRect();
       return right - left;
     };
-    const sortedLines = [...listItems(lines)];
+    const sortedLines = [...lines];
     sortedLines.sort((a, b) => lineWidth(a) - lineWidth(b));
 
     // Recognize lines in batches.
