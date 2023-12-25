@@ -1,8 +1,10 @@
 //! Logging macros that work in both WebAssembly + JS environments and native
 //! environments.
 
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_namespace = console, js_name = log)]

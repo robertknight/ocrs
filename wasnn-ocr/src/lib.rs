@@ -12,6 +12,8 @@ use wasnn_tensor::{NdTensor, NdTensorView, Tensor};
 mod log;
 pub mod page_layout;
 mod text_items;
+
+#[cfg(target_arch = "wasm32")]
 mod wasm_api;
 
 use page_layout::{find_connected_component_rects, find_text_lines, line_polygon};
