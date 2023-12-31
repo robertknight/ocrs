@@ -4,7 +4,7 @@ import {
   OcrEngineInit,
   TextLine,
   default as initOcrLib,
-} from "../build/rten_ocr.js";
+} from "../build/ocrs.js";
 import type { LineRecResult, RotatedRect, WordRecResult } from "./types";
 import type * as contentModule from "./content";
 import type { TextOverlay, TextOverlayOptions } from "./content";

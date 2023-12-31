@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Pixel Reader",
+  "name": "Ocrs",
   "description": "Copy text from images and videos",
   "version": "1.0",
   "action": {
