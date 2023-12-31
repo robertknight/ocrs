@@ -25,8 +25,8 @@ async function createOCREngine(): Promise<OcrEngine> {
     const init = async () => {
       const [ocrBin, detectionModel, recognitionModel] = await Promise.all([
         fetch("../build/ocrs_bg.wasm").then((r) => r.arrayBuffer()),
-        fetch("../build/text-detection.model").then((r) => r.arrayBuffer()),
-        fetch("../build/text-recognition.model").then((r) => r.arrayBuffer()),
+        fetch("../build/text-detection.rten").then((r) => r.arrayBuffer()),
+        fetch("../build/text-recognition.rten").then((r) => r.arrayBuffer()),
       ]);
 
       await initOcrLib(ocrBin);

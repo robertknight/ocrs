@@ -20,7 +20,7 @@ fn cache_dir() -> Result<PathBuf, Box<dyn Error>> {
 
 /// Extract the last path segment from a URL.
 ///
-/// eg. "https://models.com/text-detection.model" => "text-detection.model".
+/// eg. "https://models.com/text-detection.rten" => "text-detection.rten".
 #[allow(rustdoc::bare_urls)]
 fn filename_from_url(url: &str) -> Option<String> {
     let parsed = Url::parse(url).ok()?;
