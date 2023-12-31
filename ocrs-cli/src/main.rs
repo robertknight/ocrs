@@ -211,10 +211,12 @@ impl<T, E: std::fmt::Display> FileErrorContext<T> for Result<T, E> {
 }
 
 /// Default text detection model.
-const DETECTION_MODEL: &str = "http://localhost:2000/text-detection.rten";
+const DETECTION_MODEL: &str =
+    "https://s3.amazonaws.com/io.github.robertknight/ocrs-models/text-detection.rten";
 
 /// Default text recognition model.
-const RECOGNITION_MODEL: &str = "http://localhost:2000/text-recognition.rten";
+const RECOGNITION_MODEL: &str =
+    "https://s3.amazonaws.com/io.github.robertknight/ocrs-models/text-recognition.rten";
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = parse_args()?;
