@@ -11,14 +11,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/robertknight/wasnn.git"
+    "url": "git+https://github.com/robertknight/rten.git"
   },
   "author": "Robert Knight <robertknight@gmail.com>",
   "license": "BSD-2-Clause",
   "bugs": {
-    "url": "https://github.com/robertknight/wasnn/issues"
+    "url": "https://github.com/robertknight/rten/issues"
   },
-  "homepage": "https://github.com/robertknight/wasnn#readme",
+  "homepage": "https://github.com/robertknight/rten#readme",
   "dependencies": {
     "@types/chrome": "^0.0.242",
     "prettier": "^3.0.0",
