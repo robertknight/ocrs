@@ -1,0 +1,20 @@
+[package]
+name = "ocrs-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+image = { version = "0.24.6", default-features = false, features = ["png", "jpeg", "webp"] }
+png = "0.17.6"
+serde_json = "1.0.91"
+rten = { path = "../" }
+rten-imageproc = { path = "../rten-imageproc" }
+rten-tensor = { path = "../rten-tensor" }
+ocrs = { path = "../ocrs" }
+lexopt = "0.3.0"
+ureq = "2.7.1"
+url = "2.4.0"
+
+[[bin]]
+name = "ocrs"
+path = "src/main.rs"
