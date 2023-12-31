@@ -2,6 +2,11 @@
 name = "ocrs"
 version = "0.1.0"
 edition = "2021"
+authors = ["Robert Knight"]
+description = "OCR engine for extracting text from images"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/robertknight/rten"
+repository = "https://github.com/robertknight/rten"
 
 [dependencies]
 rayon = "1.7.0"
