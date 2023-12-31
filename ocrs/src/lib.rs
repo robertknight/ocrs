@@ -720,9 +720,10 @@ impl OcrEngine {
 mod tests {
     use std::error::Error;
 
+    use rten::model_builder::{ModelBuilder, OpType};
     use rten::ops::{MaxPool, Transpose};
+    use rten::Dimension;
     use rten::Model;
-    use rten::{Dimension, ModelBuilder, OpType};
     use rten_imageproc::{fill_rect, BoundingRect, Rect, RectF, RotatedRect};
     use rten_tensor::prelude::*;
     use rten_tensor::{NdTensor, Tensor};
