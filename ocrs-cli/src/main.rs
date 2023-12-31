@@ -7,10 +7,10 @@ use std::iter::zip;
 
 use serde_json::json;
 
-use wasnn_imageproc::{min_area_rect, BoundingRect, Painter, Point, PointF, Rgb, RotatedRect};
-use wasnn_ocr::{DecodeMethod, OcrEngine, OcrEngineParams, TextItem};
-use wasnn_tensor::prelude::*;
-use wasnn_tensor::{NdTensor, NdTensorView};
+use ocrs::{DecodeMethod, OcrEngine, OcrEngineParams, TextItem};
+use rten_imageproc::{min_area_rect, BoundingRect, Painter, Point, PointF, Rgb, RotatedRect};
+use rten_tensor::prelude::*;
+use rten_tensor::{NdTensor, NdTensorView};
 
 mod models;
 use models::{load_model, ModelSource};
@@ -179,7 +179,7 @@ Options:
 
     Export detected word boxes in JSON format.
 ",
-                    bin_name = parser.bin_name().unwrap_or("wasnn-ocr")
+                    bin_name = parser.bin_name().unwrap_or("ocrs")
                 );
                 std::process::exit(0);
             }
@@ -211,10 +211,10 @@ impl<T, E: std::fmt::Display> FileErrorContext<T> for Result<T, E> {
 }
 
 /// Default text detection model.
-const DETECTION_MODEL: &str = "http://localhost:2000/text-detection.model";
+const DETECTION_MODEL: &str = "http://localhost:2000/text-detection.rten";
 
 /// Default text recognition model.
-const RECOGNITION_MODEL: &str = "http://localhost:2000/text-recognition.model";
+const RECOGNITION_MODEL: &str = "http://localhost:2000/text-recognition.rten";
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = parse_args()?;

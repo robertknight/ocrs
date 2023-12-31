@@ -4,7 +4,7 @@ import {
   OcrEngineInit,
   TextLine,
   default as initOcrLib,
-} from "../build/wasnn_ocr.js";
+} from "../build/rten_ocr.js";
 import type { LineRecResult, RotatedRect, WordRecResult } from "./types";
 import type * as contentModule from "./content";
 import type { TextOverlay, TextOverlayOptions } from "./content";
@@ -24,9 +24,9 @@ async function createOCREngine(): Promise<OcrEngine> {
     // Initialize OCR library and fetch models on first use.
     const init = async () => {
       const [ocrBin, detectionModel, recognitionModel] = await Promise.all([
-        fetch("../build/wasnn_ocr_bg.wasm").then((r) => r.arrayBuffer()),
-        fetch("../build/text-detection.model").then((r) => r.arrayBuffer()),
-        fetch("../build/text-recognition.model").then((r) => r.arrayBuffer()),
+        fetch("../build/ocrs_bg.wasm").then((r) => r.arrayBuffer()),
+        fetch("../build/text-detection.rten").then((r) => r.arrayBuffer()),
+        fetch("../build/text-recognition.rten").then((r) => r.arrayBuffer()),
       ]);
 
       await initOcrLib(ocrBin);

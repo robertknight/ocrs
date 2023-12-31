@@ -1,7 +1,7 @@
 use std::fmt;
 use std::fmt::Write;
 
-use wasnn_imageproc::{bounding_rect, min_area_rect, Point, Rect, RotatedRect, Vec2};
+use rten_imageproc::{bounding_rect, min_area_rect, Point, Rect, RotatedRect, Vec2};
 
 /// A non-empty sequence of recognized characters ([TextChar]) that constitute a
 /// logical unit of a document such as a word or line.
@@ -110,7 +110,7 @@ impl<'a> fmt::Display for TextWord<'a> {
 
 #[cfg(test)]
 mod tests {
-    use wasnn_imageproc::{BoundingRect, Point, Rect, Vec2};
+    use rten_imageproc::{BoundingRect, Point, Rect, Vec2};
 
     use super::{TextChar, TextItem, TextLine, TextWord};
 

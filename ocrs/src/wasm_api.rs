@@ -1,11 +1,11 @@
 use wasm_bindgen::prelude::*;
 
-use wasnn::ops;
-use wasnn::{Model, OpRegistry};
+use rten::ops;
+use rten::{Model, OpRegistry};
 
-use wasnn_imageproc::{min_area_rect, BoundingRect, PointF};
-use wasnn_tensor::prelude::*;
-use wasnn_tensor::NdTensorView;
+use rten_imageproc::{min_area_rect, BoundingRect, PointF};
+use rten_tensor::prelude::*;
+use rten_tensor::NdTensorView;
 
 use crate::{OcrEngine as BaseOcrEngine, OcrEngineParams, OcrInput, TextItem};
 
@@ -165,10 +165,10 @@ impl OcrEngine {
         image: &Image,
         lines: Vec<DetectedLine>,
     ) -> Result<Vec<TextLine>, String> {
-        let lines: Vec<Vec<wasnn_imageproc::RotatedRect>> = lines
+        let lines: Vec<Vec<rten_imageproc::RotatedRect>> = lines
             .iter()
             .map(|line| {
-                let words: Vec<wasnn_imageproc::RotatedRect> =
+                let words: Vec<rten_imageproc::RotatedRect> =
                     line.words.iter().map(|word| word.rect).collect();
                 words
             })
@@ -261,7 +261,7 @@ impl Image {
 #[wasm_bindgen]
 #[derive(Clone)]
 pub struct RotatedRect {
-    rect: wasnn_imageproc::RotatedRect,
+    rect: rten_imageproc::RotatedRect,
 }
 
 #[wasm_bindgen]

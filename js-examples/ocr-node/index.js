@@ -7,7 +7,7 @@ import {
   OcrEngine,
   OcrEngineInit,
   default as initOcrLib,
-} from "../../dist/wasnn_ocr.js";
+} from "../../dist/ocrs.js";
 
 /**
  * Load a JPEG or PNG image from `path` and return the RGB image data as an
@@ -87,7 +87,7 @@ program
       // Concurrently load the OCR library, text detection and recognition models,
       // and input image.
       const [_, detectionModel, recognitionModel, image] = await Promise.all([
-        readFile("dist/wasnn_ocr_bg.wasm").then(initOcrLib),
+        readFile("dist/ocrs_bg.wasm").then(initOcrLib),
         readFile(detectionModelPath).then((data) => new Uint8Array(data)),
         readFile(recognitionModelPath).then((data) => new Uint8Array(data)),
         loadImage(imagePath),

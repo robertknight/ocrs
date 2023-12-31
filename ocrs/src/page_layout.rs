@@ -2,11 +2,11 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::iter::zip;
 
-use wasnn_imageproc::{
+use rten_imageproc::{
     bounding_rect, find_contours, min_area_rect, simplify_polygon, BoundingRect, Coord, Line,
     LineF, Point, PointF, Rect, RetrievalMode, RotatedRect,
 };
-use wasnn_tensor::NdTensorView;
+use rten_tensor::NdTensorView;
 
 struct Partition {
     score: f32,
@@ -529,10 +529,8 @@ pub fn line_polygon(words: &[RotatedRect]) -> Vec<Point> {
 
 #[cfg(test)]
 mod tests {
-    use wasnn_imageproc::{
-        fill_rect, BoundingRect, Point, Polygon, Rect, RectF, RotatedRect, Vec2,
-    };
-    use wasnn_tensor::NdTensor;
+    use rten_imageproc::{fill_rect, BoundingRect, Point, Polygon, Rect, RectF, RotatedRect, Vec2};
+    use rten_tensor::NdTensor;
 
     use super::max_empty_rects;
     use crate::page_layout::{find_connected_component_rects, find_text_lines, line_polygon};

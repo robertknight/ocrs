@@ -3,11 +3,11 @@ use std::error::Error;
 
 use rayon::prelude::*;
 
-use wasnn::ctc::{CtcDecoder, CtcHypothesis};
-use wasnn::{Dimension, FloatOperators, Model, Operators, RunOptions};
-use wasnn_imageproc::{bounding_rect, BoundingRect, Line, Point, Polygon, Rect, RotatedRect};
-use wasnn_tensor::prelude::*;
-use wasnn_tensor::{NdTensor, NdTensorView, Tensor};
+use rten::ctc::{CtcDecoder, CtcHypothesis};
+use rten::{Dimension, FloatOperators, Model, Operators, RunOptions};
+use rten_imageproc::{bounding_rect, BoundingRect, Line, Point, Polygon, Rect, RotatedRect};
+use rten_tensor::prelude::*;
+use rten_tensor::{NdTensor, NdTensorView, Tensor};
 
 mod log;
 pub mod page_layout;
@@ -720,12 +720,12 @@ impl OcrEngine {
 mod tests {
     use std::error::Error;
 
-    use wasnn::ops::{MaxPool, Transpose};
-    use wasnn::Model;
-    use wasnn::{Dimension, ModelBuilder, OpType};
-    use wasnn_imageproc::{fill_rect, BoundingRect, Rect, RectF, RotatedRect};
-    use wasnn_tensor::prelude::*;
-    use wasnn_tensor::{NdTensor, Tensor};
+    use rten::ops::{MaxPool, Transpose};
+    use rten::Model;
+    use rten::{Dimension, ModelBuilder, OpType};
+    use rten_imageproc::{fill_rect, BoundingRect, Rect, RectF, RotatedRect};
+    use rten_tensor::prelude::*;
+    use rten_tensor::{NdTensor, Tensor};
 
     use super::{OcrEngine, OcrEngineParams};
 
