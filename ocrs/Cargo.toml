@@ -10,7 +10,7 @@ repository = "https://github.com/robertknight/rten"
 
 [dependencies]
 rayon = "1.7.0"
-rten = { path = "../" }
+rten = { path = "../", version = "0.1.0" }
 rten-imageproc = { path = "../rten-imageproc", version = "0.1.0" }
 rten-tensor = { path = "../rten-tensor", version = "0.1.0" }
 
