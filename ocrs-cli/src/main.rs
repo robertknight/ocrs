@@ -3,17 +3,18 @@ use std::error::Error;
 use std::fmt;
 use std::fs;
 use std::io::BufWriter;
-use std::iter::zip;
 
-use serde_json::json;
-
-use ocrs::{DecodeMethod, OcrEngine, OcrEngineParams, TextItem};
-use rten_imageproc::{min_area_rect, BoundingRect, Painter, Point, PointF, Rgb, RotatedRect};
+use ocrs::{DecodeMethod, OcrEngine, OcrEngineParams};
 use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView};
 
 mod models;
 use models::{load_model, ModelSource};
+mod output;
+use output::{
+    format_json_output, format_text_output, generate_annotated_png, FormatJsonArgs,
+    GeneratePngArgs, OutputFormat,
+};
 
 /// Read an image from `path` into a CHW tensor.
 fn read_image(path: &str) -> Result<NdTensor<f32, 3>, Box<dyn Error>> {
@@ -68,40 +69,6 @@ fn image_from_tensor(tensor: NdTensorView<f32, 3>) -> Vec<u8> {
         .collect()
 }
 
-/// Generate a JSON representation of detected word boxes in an image.
-///
-/// The format here matches that used by the layout model / evaluation tools.
-fn word_boxes_json(
-    img_path: &str,
-    image: NdTensorView<f32, 3>,
-    boxes: &[RotatedRect],
-) -> serde_json::Value {
-    let word_items: Vec<_> = boxes
-        .iter()
-        .map(|wr| {
-            let br = wr.bounding_rect();
-            let coords = [br.left(), br.top(), br.right(), br.bottom()].map(|c| c.round() as i32);
-            json!({
-                "coords": coords,
-            })
-        })
-        .collect();
-
-    json!({
-        "url": img_path,
-        "resolution": {
-            "width": image.size(2),
-            "height": image.size(1),
-        },
-
-        // nb. Since we haven't got layout analysis info here, we just put all
-        // the words in one paragraph.
-        "paragraphs": [{
-            "words": serde_json::Value::Array(word_items),
-        }]
-    })
-}
-
 struct Args {
     /// Path to a text detection model.
     detection_model: Option<String>,
@@ -115,8 +82,10 @@ struct Args {
     /// Enable debug output.
     debug: bool,
 
-    /// Export word boxes from text detection to a JSON file.
-    export_boxes: Option<String>,
+    output_format: OutputFormat,
+
+    /// Output file path. Defaults to stdout.
+    output_path: Option<String>,
 
     /// Use beam search for sequence decoding.
     beam_search: bool,
@@ -129,7 +98,8 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     let mut beam_search = false;
     let mut debug = false;
     let mut detection_model = None;
-    let mut export_boxes = None;
+    let mut output_format = OutputFormat::Text;
+    let mut output_path = None;
     let mut recognition_model = None;
 
     let mut parser = lexopt::Parser::from_env();
@@ -145,23 +115,25 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             Long("detect-model") => {
                 detection_model = Some(parser.value()?.string()?);
             }
-            Long("export-boxes") => {
-                export_boxes = Some(parser.value()?.string()?);
+            Short('j') | Long("json") => {
+                output_format = OutputFormat::Json;
+            }
+            Short('o') | Long("output") => {
+                output_path = Some(parser.value()?.string()?);
+            }
+            Short('p') | Long("png") => {
+                output_format = OutputFormat::Png;
             }
             Long("rec-model") => {
                 recognition_model = Some(parser.value()?.string()?);
             }
             Long("help") => {
                 println!(
-                    "Read text in images.
+                    "Extract text from an image.
 
 Usage: {bin_name} [OPTIONS] <image>
 
 Options:
-
-  --beam
-
-    Use beam search for decoding.
 
   --debug
 
@@ -171,13 +143,27 @@ Options:
 
     Use a custom text detection model.
 
+  -j, --json
+
+    Output text and structure in JSON format.
+
+  -o, --output <path>
+
+    Output file path (defaults to stdout)
+
+  -p, --png
+
+    Output annotated copy of input image in PNG format.
+
   --rec-model <path>
 
     Use a custom text recognition model.
 
-  --export-boxes <path>
+Advanced options:
 
-    Export detected word boxes in JSON format.
+  --beam
+
+    Use beam search for decoding.
 ",
                     bin_name = parser.bin_name().unwrap_or("ocrs")
                 );
@@ -191,7 +177,8 @@ Options:
         beam_search,
         debug,
         detection_model,
-        export_boxes,
+        output_format,
+        output_path,
         image: values.pop_front().ok_or("missing `<image>` arg")?,
         recognition_model,
     })
@@ -259,14 +246,41 @@ fn main() -> Result<(), Box<dyn Error>> {
     let word_rects = engine.detect_words(&ocr_input)?;
     let line_rects = engine.find_text_lines(&ocr_input, &word_rects);
     let line_texts = engine.recognize_text(&ocr_input, &line_rects)?;
-    for line in line_texts.iter().flatten() {
-        println!("{}", line);
-    }
 
-    if let Some(boxes_path) = args.export_boxes {
-        let json_data = word_boxes_json(&args.image, color_img.view(), &word_rects);
-        let json_bytes = serde_json::to_vec_pretty(&json_data)?;
-        std::fs::write(boxes_path, json_bytes)?;
+    let write_output_str = |content: String| -> Result<(), Box<dyn Error>> {
+        if let Some(output_path) = &args.output_path {
+            std::fs::write(output_path, content.into_bytes())?;
+        } else {
+            println!("{}", content);
+        }
+        Ok(())
+    };
+
+    match args.output_format {
+        OutputFormat::Text => {
+            let content = format_text_output(&line_texts);
+            write_output_str(content)?;
+        }
+        OutputFormat::Json => {
+            let content = format_json_output(FormatJsonArgs {
+                input_path: &args.image,
+                input_hw: color_img.shape()[1..].try_into()?,
+                word_rects: &word_rects,
+            });
+            write_output_str(content)?;
+        }
+        OutputFormat::Png => {
+            let png_args = GeneratePngArgs {
+                img: color_img.view(),
+                line_rects: &line_rects,
+                text_lines: &line_texts,
+            };
+            let annotated_img = generate_annotated_png(png_args);
+            let Some(output_path) = args.output_path else {
+                return Err("Output path must be specified when generating annotated PNG".into());
+            };
+            write_image(&output_path, annotated_img.view())?;
+        }
     }
 
     if args.debug {
@@ -277,65 +291,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             color_img.size(2),
             color_img.size(1),
         );
-
-        let mut annotated_img = color_img;
-        let mut painter = Painter::new(annotated_img.view_mut());
-
-        // Colors chosen from https://www.w3.org/wiki/CSS/Properties/color/keywords.
-        //
-        // Light colors for text detection outputs, darker colors for
-        // corresponding text recognition outputs.
-        const CORAL: Rgb = [255, 127, 80];
-        const DARKSEAGREEN: Rgb = [143, 188, 143];
-        const CORNFLOWERBLUE: Rgb = [100, 149, 237];
-
-        const CRIMSON: Rgb = [220, 20, 60];
-        const DARKGREEN: Rgb = [0, 100, 0];
-        const DARKBLUE: Rgb = [0, 0, 139];
-
-        const LIGHT_GRAY: Rgb = [200, 200, 200];
-
-        let u8_to_f32 = |x: u8| x as f32 / 255.;
-        let floor_point = |p: PointF| Point::from_yx(p.y as i32, p.x as i32);
-
-        // Draw line bounding rects from layout analysis step.
-        for line in line_rects.iter() {
-            let line_points: Vec<_> = line
-                .iter()
-                .flat_map(|word_rect| word_rect.corners().into_iter())
-                .collect();
-            if let Some(line_rect) = min_area_rect(&line_points) {
-                painter.set_stroke(LIGHT_GRAY.map(u8_to_f32));
-                painter.draw_polygon(&line_rect.corners().map(floor_point));
-            };
-        }
-
-        // Draw word bounding rects from text detection step, grouped by line.
-        let colors = [CORAL, DARKSEAGREEN, CORNFLOWERBLUE];
-        for (line, color) in zip(line_rects.iter(), colors.into_iter().cycle()) {
-            for word_rect in line {
-                painter.set_stroke(color.map(u8_to_f32));
-                painter.draw_polygon(&word_rect.corners().map(floor_point));
-            }
-        }
-
-        // Draw word bounding rects from text recognition step. These may be
-        // different as they are computed from the bounding boxes of recognized
-        // characters.
-        let colors = [CRIMSON, DARKGREEN, DARKBLUE];
-        for (line, color) in zip(line_texts.into_iter(), colors.into_iter().cycle()) {
-            let Some(line) = line else {
-                // Skip lines where recognition produced no output.
-                continue;
-            };
-            for text_word in line.words() {
-                painter.set_stroke(color.map(u8_to_f32));
-                painter.draw_polygon(&text_word.rotated_rect().corners().map(floor_point));
-            }
-        }
-
-        // Write out the annotated input image.
-        write_image("ocr-debug-output.png", annotated_img.view())?;
     }
 
     Ok(())

@@ -63,7 +63,11 @@ pub struct TextLine {
 }
 
 impl TextLine {
-    pub(crate) fn new(chars: Vec<TextChar>) -> TextLine {
+    /// Create a new text line which contains the given characters.
+    ///
+    /// Word boundaries are inferred from the presence of characters with
+    /// [TextChar::char] values that are ASCII spaces.
+    pub fn new(chars: Vec<TextChar>) -> TextLine {
         assert!(!chars.is_empty(), "Text lines must not be empty");
         TextLine { chars }
     }
