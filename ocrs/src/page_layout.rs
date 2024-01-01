@@ -402,7 +402,7 @@ pub fn find_column_separators(words: &[RotatedRect]) -> Vec<Rect> {
         .iter()
         .map(|r| r.bounding_rect().integral_bounding_rect())
         .collect();
-    let min_width = (median_word_spacing * 3) / 2;
+    let min_width = median_word_spacing * 3;
     let min_height = (3 * median_height.max(0)) as u32;
 
     max_empty_rects(
