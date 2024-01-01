@@ -137,15 +137,15 @@ Options:
 
   --debug
 
-    Enable debug output.
+    Enable debug output
 
   --detect-model <path>
 
-    Use a custom text detection model.
+    Use a custom text detection model
 
   -j, --json
 
-    Output text and structure in JSON format.
+    Output text and structure in JSON format
 
   -o, --output <path>
 
@@ -153,11 +153,15 @@ Options:
 
   -p, --png
 
-    Output annotated copy of input image in PNG format.
+    Output annotated copy of input image in PNG format
 
   --rec-model <path>
 
-    Use a custom text recognition model.
+    Use a custom text recognition model
+
+  --version
+
+    Display version info
 
 Advanced options:
 
@@ -167,6 +171,10 @@ Advanced options:
 ",
                     bin_name = parser.bin_name().unwrap_or("ocrs")
                 );
+                std::process::exit(0);
+            }
+            Long("version") => {
+                println!("ocrs {}", env!("CARGO_PKG_VERSION"));
                 std::process::exit(0);
             }
             _ => return Err(arg.unexpected()),
