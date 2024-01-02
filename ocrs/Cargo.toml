@@ -5,8 +5,8 @@ edition = "2021"
 authors = ["Robert Knight"]
 description = "OCR engine"
 license = "MIT OR Apache-2.0"
-homepage = "https://github.com/robertknight/rten"
-repository = "https://github.com/robertknight/rten"
+homepage = "https://github.com/robertknight/ocrs"
+repository = "https://github.com/robertknight/ocrs"
 
 [dependencies]
 rayon = "1.7.0"
