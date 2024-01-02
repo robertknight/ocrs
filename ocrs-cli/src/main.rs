@@ -272,7 +272,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let content = format_json_output(FormatJsonArgs {
                 input_path: &args.image,
                 input_hw: color_img.shape()[1..].try_into()?,
-                word_rects: &word_rects,
+                text_lines: &line_texts,
             });
             write_output_str(content)?;
         }

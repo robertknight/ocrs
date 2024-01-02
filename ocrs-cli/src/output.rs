@@ -1,4 +1,4 @@
-use rten_imageproc::{min_area_rect, BoundingRect, Painter, Point, PointF, Rgb, RotatedRect};
+use rten_imageproc::{min_area_rect, Painter, Point, PointF, Rgb, RotatedRect};
 use rten_tensor::{NdTensor, NdTensorView};
 use serde_json::json;
 
@@ -16,38 +16,60 @@ pub enum OutputFormat {
     Json,
 }
 
-/// Generate a JSON representation of detected word boxes in an image.
+/// Return the coordinates of vertices of `rr` as an array of `[x, y]` points.
 ///
-/// The format here matches that used by the layout model / evaluation tools.
-fn word_boxes_json(
-    img_path: &str,
-    image_hw: [usize; 2],
-    boxes: &[RotatedRect],
-) -> serde_json::Value {
-    let word_items: Vec<_> = boxes
+/// This matches the format of the "vertices" data in the HierText dataset.
+/// See [RotatedRect::corners] for details of the vertex order.
+fn rounded_vertex_coords(rr: &RotatedRect) -> [[i32; 2]; 4] {
+    rr.corners()
+        .map(|point| [point.x.round() as i32, point.y.round() as i32])
+}
+
+/// Format extracted text and hierarchical layout information as JSON.
+///
+/// The JSON format roughly follows the structure of the ground truth data in
+/// the [HierText](https://github.com/google-research-datasets/hiertext)
+/// dataset, on which ocrs's models were trained.
+fn ocr_json(args: FormatJsonArgs) -> serde_json::Value {
+    let FormatJsonArgs {
+        input_path,
+        input_hw,
+        text_lines,
+    } = args;
+
+    let line_items: Vec<_> = text_lines
         .iter()
-        .map(|wr| {
-            let br = wr.bounding_rect();
-            let coords = [br.left(), br.top(), br.right(), br.bottom()].map(|c| c.round() as i32);
+        .filter_map(|line| line.as_ref())
+        .map(|line| {
+            let word_items: Vec<_> = line
+                .words()
+                .map(|word| {
+                    json!({
+                        "text": word.to_string(),
+                        "vertices": rounded_vertex_coords(&word.rotated_rect()),
+                    })
+                })
+                .collect();
+
             json!({
-                "coords": coords,
+                "text": line.to_string(),
+                "words": word_items,
+                "vertices": rounded_vertex_coords(&line.rotated_rect()),
             })
         })
         .collect();
 
-    let [height, width] = image_hw;
+    let [height, width] = input_hw;
 
     json!({
-        "url": img_path,
-        "resolution": {
-            "width": width,
-            "height": height,
-        },
+        "url": input_path,
+        "image_width": width,
+        "image_height": height,
 
         // nb. Since we haven't got layout analysis info here, we just put all
-        // the words in one paragraph.
+        // the lines on one paragraph.
         "paragraphs": [{
-            "words": serde_json::Value::Array(word_items),
+            "lines": serde_json::Value::Array(line_items),
         }]
     })
 }
@@ -57,8 +79,8 @@ pub struct FormatJsonArgs<'a> {
     pub input_path: &'a str,
     pub input_hw: [usize; 2],
 
-    /// Word bounding boxes returned by OCR engine.
-    pub word_rects: &'a [RotatedRect],
+    /// Lines of text recognized by OCR engine.
+    pub text_lines: &'a [Option<TextLine>],
 }
 
 /// Format OCR outputs as plain text.
@@ -73,7 +95,7 @@ pub fn format_text_output(text_lines: &[Option<TextLine>]) -> String {
 
 /// Format OCR outputs as JSON.
 pub fn format_json_output(args: FormatJsonArgs) -> String {
-    let json_data = word_boxes_json(args.input_path, args.input_hw, args.word_rects);
+    let json_data = ocr_json(args);
     serde_json::to_string_pretty(&json_data).expect("JSON formatting failed")
 }
 
@@ -157,6 +179,10 @@ pub fn generate_annotated_png(args: GeneratePngArgs) -> NdTensor<f32, 3> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::read_to_string;
+    use std::io;
+    use std::path::PathBuf;
+
     use ocrs::{TextChar, TextItem, TextLine};
     use rten_imageproc::Rect;
     use rten_tensor::prelude::*;
@@ -167,6 +193,7 @@ mod tests {
         GeneratePngArgs,
     };
 
+    /// Generate dummy OCR output with the given text and character spacing.
     fn gen_text_chars(text: &str, width: i32) -> Vec<TextChar> {
         text.chars()
             .enumerate()
@@ -177,19 +204,31 @@ mod tests {
             .collect()
     }
 
+    fn read_test_file(path: &str) -> Result<String, io::Error> {
+        let mut abs_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        abs_path.push("test-data/");
+        abs_path.push(path);
+        read_to_string(abs_path)
+    }
+
     #[test]
     fn test_format_json_output() {
-        let line = TextLine::new(gen_text_chars("this is a test line", 10));
-        let word_rects: Vec<_> = line.words().map(|w| w.rotated_rect()).collect();
+        let lines = &[
+            Some(TextLine::new(gen_text_chars("line one", 10))),
+            None,
+            Some(TextLine::new(gen_text_chars("line two", 10))),
+        ];
 
         let json = format_json_output(FormatJsonArgs {
             input_path: "image.jpeg",
             input_hw: [256, 256],
-            word_rects: &word_rects,
+            text_lines: lines,
         });
+        let parsed_json: serde_json::Value = serde_json::from_str(&json).unwrap();
 
-        // At present this is just a trivial "does it run" test.
-        assert!(!json.is_empty());
+        let expected_json = read_test_file("format-json-expected.json").unwrap();
+        let expected: serde_json::Value = serde_json::from_str(&expected_json).unwrap();
+        assert_eq!(parsed_json, expected);
     }
 
     #[test]
