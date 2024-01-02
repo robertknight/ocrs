@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2024-01-02
+
+ - Extract the ocrs project out of the [RTen](https://github.com/robertknight/rten)
+   repository and into a standalone repo at https://github.com/robertknight/ocrs.
+
+ - Improve the `--json` output format with extracted text and coordinates of
+   the rotated bounding rect for each word and line (92f17fb).
+
 ## [0.2.1] - 2024-01-01
 
  - Update rten to fix incorrect output on non-x64 / wasm32 platforms
