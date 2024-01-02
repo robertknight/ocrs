@@ -1,6 +1,6 @@
 [package]
 name = "ocrs"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Robert Knight"]
 description = "OCR engine for extracting text from images"
@@ -10,7 +10,7 @@ repository = "https://github.com/robertknight/rten"
 
 [dependencies]
 rayon = "1.7.0"
-rten = { path = "../", version = "0.1.0" }
+rten = { path = "../", version = "0.1.1" }
 rten-imageproc = { path = "../rten-imageproc", version = "0.1.0" }
 rten-tensor = { path = "../rten-tensor", version = "0.1.0" }
 
