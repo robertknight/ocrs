@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = [
+  "ocrs",
+  "ocrs-cli",
+]
+
+[lints.clippy]
+# `assert!(const)` effectively used as a static assert, which compiler will
+# optimize away.
+assertions_on_constants = "allow"
+# Clippy frequently suggests to replace for loops with const bounds (often used
+# in performance-critical loops) with iterators, which is more verbose and
+# potentially less efficient.
+needless_range_loop = "allow"
+too_many_arguments = "allow"

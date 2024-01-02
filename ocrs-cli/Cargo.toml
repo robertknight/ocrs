@@ -12,9 +12,9 @@ repository = "https://github.com/robertknight/rten"
 image = { version = "0.24.6", default-features = false, features = ["png", "jpeg", "jpeg_rayon", "webp"] }
 png = "0.17.6"
 serde_json = "1.0.91"
-rten = { path = "../", version = "0.1.0" }
-rten-imageproc = { path = "../rten-imageproc", version = "0.1.0" }
-rten-tensor = { path = "../rten-tensor", version = "0.1.0" }
+rten = { version = "0.1.0" }
+rten-imageproc = { version = "0.1.0" }
+rten-tensor = { version = "0.1.0" }
 ocrs = { path = "../ocrs", version = "0.2.0" }
 lexopt = "0.3.0"
 ureq = "2.7.1"
