@@ -3,16 +3,16 @@ name = "ocrs"
 version = "0.2.1"
 edition = "2021"
 authors = ["Robert Knight"]
-description = "OCR engine for extracting text from images"
+description = "OCR engine"
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/robertknight/rten"
 repository = "https://github.com/robertknight/rten"
 
 [dependencies]
 rayon = "1.7.0"
-rten = { path = "../", version = "0.1.1" }
-rten-imageproc = { path = "../rten-imageproc", version = "0.1.0" }
-rten-tensor = { path = "../rten-tensor", version = "0.1.0" }
+rten = { version = "0.1.1" }
+rten-imageproc = { version = "0.1.0" }
+rten-tensor = { version = "0.1.0" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2.87"
@@ -20,7 +20,7 @@ wasm-bindgen = "0.2.87"
 [dev-dependencies]
 fastrand = "1.9.0"
 lexopt = "0.3.0"
-rten-imageio = { path = "../rten-imageio", version = "0.1.0" }
+rten-imageio = { version = "0.1.0" }
 
 [lib]
 crate-type = ["lib", "cdylib"]

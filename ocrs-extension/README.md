@@ -11,7 +11,7 @@ It has currently only been tested in Chrome.
     repository run:
 
     ```sh
-    make ocrs-wasm
+    make wasm
     ```
 
 2.  Download pre-trained models. The easiest way to do this is to run the

@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = [
+  "ocrs",
+  "ocrs-cli",
+]
+
+[lints.clippy]
+too_many_arguments = "allow"

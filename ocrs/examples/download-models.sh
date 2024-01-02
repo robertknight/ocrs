@@ -1,4 +1,7 @@
 #!/bin/sh
 
-curl https://s3.amazonaws.com/io.github.robertknight/ocrs-models/text-detection.rten -o text-detection.rten
-curl https://s3.amazonaws.com/io.github.robertknight/ocrs-models/text-recognition.rten -o text-recognition.rten
+DETECTION_MODEL="https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten"
+RECOGNITION_MODEL="https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten"
+
+curl "$DETECTION_MODEL" -o text-detection.rten
+curl "$RECOGNITION_MODEL" -o text-recognition.rten
