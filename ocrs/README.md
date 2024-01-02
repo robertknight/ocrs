@@ -7,7 +7,7 @@ This crate contains the **ocrs** OCR engine as a library. See the
 
 ## Usage
 
-See [examples/hello_ocr.rs]() for a minimal example of using this library in
+See [examples/hello_ocr.rs](./examples/hello_ocr.rs) for a minimal example of using this library in
 a Rust application.
 
 ```sh
