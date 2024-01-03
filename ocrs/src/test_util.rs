@@ -26,3 +26,10 @@ pub fn gen_rect_grid(
 
     rects
 }
+
+/// Return the union of `rects` or `None` if rects is empty.
+pub fn union_rects(rects: &[Rect]) -> Option<Rect> {
+    rects
+        .iter()
+        .fold(None, |union, r| union.map(|u| u.union(*r)).or(Some(*r)))
+}
