@@ -5,8 +5,8 @@ use rten_imageproc::RotatedRect;
 use rten_tensor::{NdTensor, NdTensorView};
 
 mod detection;
+mod layout_analysis;
 mod log;
-mod page_layout;
 mod preprocess;
 mod recognition;
 
@@ -19,7 +19,7 @@ mod text_items;
 mod wasm_api;
 
 use detection::TextDetector;
-use page_layout::find_text_lines;
+use layout_analysis::find_text_lines;
 use preprocess::prepare_image;
 use recognition::{RecognitionOpt, TextRecognizer};
 

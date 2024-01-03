@@ -8,7 +8,7 @@ use rten_imageproc::{bounding_rect, BoundingRect, Line, Point, Polygon, Rect, Ro
 use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView, Tensor};
 
-use crate::page_layout::line_polygon;
+use crate::layout_analysis::line_polygon;
 use crate::preprocess::BLACK_VALUE;
 use crate::text_items::{TextChar, TextLine};
 
