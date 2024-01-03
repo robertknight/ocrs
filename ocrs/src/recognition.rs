@@ -4,11 +4,13 @@ use std::error::Error;
 use rayon::prelude::*;
 use rten::ctc::{CtcDecoder, CtcHypothesis};
 use rten::{Dimension, FloatOperators, Model, NodeId};
-use rten_imageproc::{bounding_rect, BoundingRect, Line, Point, Polygon, Rect, RotatedRect};
+use rten_imageproc::{
+    bounding_rect, BoundingRect, Line, Point, PointF, Polygon, Rect, RotatedRect,
+};
 use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView, Tensor};
 
-use crate::layout_analysis::line_polygon;
+use crate::geom_util::{downwards_line, leftmost_edge, rightmost_edge};
 use crate::preprocess::BLACK_VALUE;
 use crate::text_items::{TextChar, TextLine};
 
@@ -27,6 +29,44 @@ fn round_up<
 ) -> T {
     let rem = val % factor;
     (val + factor) - rem
+}
+
+/// Return a polygon which contains all the rects in `words`.
+///
+/// `words` is assumed to be a series of disjoint rectangles ordered from left
+/// to right. The returned points are arranged in clockwise order starting from
+/// the top-left point.
+///
+/// There are several ways to compute a polygon for a line. The simplest is
+/// to use [min_area_rect] on the union of the line's points. However the result
+/// will not tightly fit curved lines. This function returns a polygon which
+/// closely follows the edges of individual words.
+fn line_polygon(words: &[RotatedRect]) -> Vec<Point> {
+    let mut polygon = Vec::new();
+
+    let floor_point = |p: PointF| Point::from_yx(p.y as i32, p.x as i32);
+
+    // Add points from top edges, in left-to-right order.
+    for word_rect in words.iter() {
+        let (left, right) = (
+            downwards_line(leftmost_edge(word_rect)),
+            downwards_line(rightmost_edge(word_rect)),
+        );
+        polygon.push(floor_point(left.start));
+        polygon.push(floor_point(right.start));
+    }
+
+    // Add points from bottom edges, in right-to-left order.
+    for word_rect in words.iter().rev() {
+        let (left, right) = (
+            downwards_line(leftmost_edge(word_rect)),
+            downwards_line(rightmost_edge(word_rect)),
+        );
+        polygon.push(floor_point(right.end));
+        polygon.push(floor_point(left.end));
+    }
+
+    polygon
 }
 
 /// Details about a text line needed to prepare the input to the text
@@ -429,5 +469,43 @@ impl TextRecognizer {
         let text_lines = text_lines_from_recognition_results(&line_rec_results);
 
         Ok(text_lines)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rten_imageproc::{BoundingRect, Point, Polygon, RotatedRect, Vec2};
+
+    use super::line_polygon;
+
+    #[test]
+    fn test_line_polygon() {
+        let words: Vec<RotatedRect> = (0..5)
+            .map(|i| {
+                let center = Point::from_yx(10., i as f32 * 20.);
+                let width = 10.;
+                let height = 5.;
+
+                // Vary the orientation of words. The output of `line_polygon`
+                // should be invariant to different orientations of a RotatedRect
+                // that cover the same pixels.
+                let up = if i % 2 == 0 {
+                    Vec2::from_yx(-1., 0.)
+                } else {
+                    Vec2::from_yx(1., 0.)
+                };
+                RotatedRect::new(center, up, width, height)
+            })
+            .collect();
+        let poly = Polygon::new(line_polygon(&words));
+
+        assert!(poly.is_simple());
+        for word in words {
+            let center = word.bounding_rect().center();
+            assert!(poly.contains_pixel(Point::from_yx(
+                center.y.round() as i32,
+                center.x.round() as i32
+            )));
+        }
     }
 }

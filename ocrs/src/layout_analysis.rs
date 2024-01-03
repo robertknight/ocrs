@@ -1,8 +1,8 @@
 use std::iter::zip;
 
-use rten_imageproc::{
-    bounding_rect, BoundingRect, Coord, Line, LineF, Point, PointF, Rect, RotatedRect,
-};
+use rten_imageproc::{bounding_rect, BoundingRect, Line, LineF, Point, Rect, RotatedRect};
+
+use crate::geom_util::{leftmost_edge, rightmost_edge};
 
 mod empty_rects;
 use empty_rects::{max_empty_rects, FilterOverlapping};
@@ -10,18 +10,6 @@ use empty_rects::{max_empty_rects, FilterOverlapping};
 fn rects_separated_by_line(a: &RotatedRect, b: &RotatedRect, l: LineF) -> bool {
     let a_to_b = LineF::from_endpoints(a.center(), b.center());
     a_to_b.intersects(l)
-}
-
-fn rightmost_edge(r: &RotatedRect) -> LineF {
-    let mut corners = r.corners();
-    corners.sort_by(|a, b| a.x.total_cmp(&b.x));
-    Line::from_endpoints(corners[2], corners[3])
-}
-
-fn leftmost_edge(r: &RotatedRect) -> LineF {
-    let mut corners = r.corners();
-    corners.sort_by(|a, b| a.x.total_cmp(&b.x));
-    Line::from_endpoints(corners[0], corners[1])
 }
 
 /// Group rects into lines. Each line is a chain of oriented rects ordered
@@ -241,58 +229,11 @@ pub fn find_text_lines(words: &[RotatedRect]) -> Vec<Vec<RotatedRect>> {
         .collect()
 }
 
-/// Normalize a line so that it's endpoints are sorted from top to bottom.
-fn downwards_line<T: Coord>(l: Line<T>) -> Line<T> {
-    if l.start.y <= l.end.y {
-        l
-    } else {
-        Line::from_endpoints(l.end, l.start)
-    }
-}
-
-/// Return a polygon which contains all the rects in `words`.
-///
-/// `words` is assumed to be a series of disjoint rectangles ordered from left
-/// to right. The returned points are arranged in clockwise order starting from
-/// the top-left point.
-///
-/// There are several ways to compute a polygon for a line. The simplest is
-/// to use [min_area_rect] on the union of the line's points. However the result
-/// will not tightly fit curved lines. This function returns a polygon which
-/// closely follows the edges of individual words.
-pub fn line_polygon(words: &[RotatedRect]) -> Vec<Point> {
-    let mut polygon = Vec::new();
-
-    let floor_point = |p: PointF| Point::from_yx(p.y as i32, p.x as i32);
-
-    // Add points from top edges, in left-to-right order.
-    for word_rect in words.iter() {
-        let (left, right) = (
-            downwards_line(leftmost_edge(word_rect)),
-            downwards_line(rightmost_edge(word_rect)),
-        );
-        polygon.push(floor_point(left.start));
-        polygon.push(floor_point(right.start));
-    }
-
-    // Add points from bottom edges, in right-to-left order.
-    for word_rect in words.iter().rev() {
-        let (left, right) = (
-            downwards_line(leftmost_edge(word_rect)),
-            downwards_line(rightmost_edge(word_rect)),
-        );
-        polygon.push(floor_point(right.end));
-        polygon.push(floor_point(left.end));
-    }
-
-    polygon
-}
-
 #[cfg(test)]
 mod tests {
-    use rten_imageproc::{BoundingRect, Point, Polygon, Rect, RectF, RotatedRect, Vec2};
+    use rten_imageproc::{BoundingRect, Point, Rect, RectF, RotatedRect};
 
-    use super::{find_text_lines, line_polygon};
+    use super::find_text_lines;
     use crate::test_util::{gen_rect_grid, union_rects};
 
     #[test]
@@ -351,37 +292,6 @@ mod tests {
             assert!((line_height - word_h as f32).abs() <= 1.);
             let expected_width = col_words * (word_w + word_gap) - word_gap;
             assert!((line_width - expected_width as f32).abs() <= 1.);
-        }
-    }
-
-    #[test]
-    fn test_line_polygon() {
-        let words: Vec<RotatedRect> = (0..5)
-            .map(|i| {
-                let center = Point::from_yx(10., i as f32 * 20.);
-                let width = 10.;
-                let height = 5.;
-
-                // Vary the orientation of words. The output of `line_polygon`
-                // should be invariant to different orientations of a RotatedRect
-                // that cover the same pixels.
-                let up = if i % 2 == 0 {
-                    Vec2::from_yx(-1., 0.)
-                } else {
-                    Vec2::from_yx(1., 0.)
-                };
-                RotatedRect::new(center, up, width, height)
-            })
-            .collect();
-        let poly = Polygon::new(line_polygon(&words));
-
-        assert!(poly.is_simple());
-        for word in words {
-            let center = word.bounding_rect().center();
-            assert!(poly.contains_pixel(Point::from_yx(
-                center.y.round() as i32,
-                center.x.round() as i32
-            )));
         }
     }
 }

@@ -5,6 +5,7 @@ use rten_imageproc::RotatedRect;
 use rten_tensor::{NdTensor, NdTensorView};
 
 mod detection;
+mod geom_util;
 mod layout_analysis;
 mod log;
 mod preprocess;
