@@ -9,7 +9,7 @@ use url::Url;
 /// Return the path to the directory in which cached models etc. should be
 /// saved.
 fn cache_dir() -> Result<PathBuf, Box<dyn Error>> {
-    let mut cache_dir: PathBuf = std::env::var("HOME").map(|dir| dir.into())?;
+    let mut cache_dir: PathBuf = home::home_dir().ok_or("failed to determine home directory")?;
     cache_dir.push(".cache");
     cache_dir.push("ocrs");
 
