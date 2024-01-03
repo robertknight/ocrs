@@ -22,6 +22,11 @@ lint:
 test:
 	cargo test --workspace
 
+.PHONY: test-e2e
+test-e2e:
+	# TODO - Actually check the output is correct
+	cargo run --release -p ocrs-cli ocrs-cli/test-data/why-rust.png
+
 .PHONY: wasm
 wasm:
 	RUSTFLAGS="-C target-feature=+simd128" cargo build --release --target wasm32-unknown-unknown --package ocrs

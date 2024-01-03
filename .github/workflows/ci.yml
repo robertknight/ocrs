@@ -3,7 +3,10 @@ on:
   pull_request:
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout
       uses: actions/checkout@v3
@@ -31,3 +34,5 @@ jobs:
       run: |
         make checkformatting
         make lint
+    - name: E2E Test
+      run: make test-e2e
