@@ -49,17 +49,25 @@ $ ocrs image.png
 When the tool is run for the first time, it will download the required models
 automatically and store them in `~/.cache/ocrs`.
 
-To extract text from an image and write to `content.txt`:
+### Additional examples
+
+Extract text from an image and write to `content.txt`:
 
 ```sh
 $ ocrs image.png -o content.txt
 ```
 
-To extract text and layout information from the image in JSON format:
+Extract text and layout information from the image in JSON format:
 
 ```sh
 $ ocrs image.png --json -o content.json
 ```
+
+Annotate an image to show the location of detected words and lines:
+
+```sh
+$ ocrs image.png --png -o annotated.png
+````
 
 ## Models and datasets
 
