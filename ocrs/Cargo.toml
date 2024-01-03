@@ -10,7 +10,7 @@ repository = "https://github.com/robertknight/ocrs"
 
 [dependencies]
 rayon = "1.7.0"
-rten = { version = "0.1.1" }
+rten = { version = "0.2.0" }
 rten-imageproc = { version = "0.1.0" }
 rten-tensor = { version = "0.1.0" }
 

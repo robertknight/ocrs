@@ -391,9 +391,9 @@ dependencies = [
 
 [[package]]
 name = "rten"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4acff58bcc0485ff874a434114c65dbd8e54716861befeaee13d7343294b73b7"
+checksum = "c6a6dac3f93209d93dbd51b9f0fc0242a7efd2cc5d4dfb187060acca12fae481"
 dependencies = [
  "flatbuffers",
  "libm",
