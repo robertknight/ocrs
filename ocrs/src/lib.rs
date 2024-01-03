@@ -9,6 +9,10 @@ mod log;
 mod page_layout;
 mod preprocess;
 mod recognition;
+
+#[cfg(test)]
+mod test_util;
+
 mod text_items;
 
 #[cfg(target_arch = "wasm32")]

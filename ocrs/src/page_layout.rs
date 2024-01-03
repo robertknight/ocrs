@@ -3,10 +3,8 @@ use std::collections::BinaryHeap;
 use std::iter::zip;
 
 use rten_imageproc::{
-    bounding_rect, find_contours, min_area_rect, simplify_polygon, BoundingRect, Coord, Line,
-    LineF, Point, PointF, Rect, RetrievalMode, RotatedRect,
+    bounding_rect, BoundingRect, Coord, Line, LineF, Point, PointF, Rect, RotatedRect,
 };
-use rten_tensor::NdTensorView;
 
 struct Partition {
     score: f32,
@@ -310,37 +308,6 @@ pub fn group_into_lines(rects: &[RotatedRect], separators: &[LineF]) -> Vec<Vec<
     lines
 }
 
-/// Find the minimum-area oriented rectangles containing each connected
-/// component in the binary mask `mask`.
-pub fn find_connected_component_rects(
-    mask: NdTensorView<i32, 2>,
-    expand_dist: f32,
-) -> Vec<RotatedRect> {
-    // Threshold for the minimum area of returned rectangles.
-    //
-    // This can be used to filter out rects created by small false positives in
-    // the mask, at the risk of filtering out true positives. The more accurate
-    // the model producing the mask is, the less this is needed.
-    let min_area_threshold = 100.;
-
-    find_contours(mask, RetrievalMode::External)
-        .iter()
-        .filter_map(|poly| {
-            let float_points: Vec<_> = poly.iter().map(|p| p.to_f32()).collect();
-            let simplified = simplify_polygon(&float_points, 2. /* epsilon */);
-
-            min_area_rect(&simplified).map(|mut rect| {
-                rect.resize(
-                    rect.width() + 2. * expand_dist,
-                    rect.height() + 2. * expand_dist,
-                );
-                rect
-            })
-        })
-        .filter(|r| r.area() >= min_area_threshold)
-        .collect()
-}
-
 /// A text line is a sequence of RotatedRects for words, organized from left to
 /// right.
 type TextLine = Vec<RotatedRect>;
@@ -547,38 +514,11 @@ pub fn line_polygon(words: &[RotatedRect]) -> Vec<Point> {
 
 #[cfg(test)]
 mod tests {
-    use rten_imageproc::{fill_rect, BoundingRect, Point, Polygon, Rect, RectF, RotatedRect, Vec2};
-    use rten_tensor::NdTensor;
+    use rten_imageproc::{BoundingRect, Point, Polygon, Rect, RectF, RotatedRect, Vec2};
 
     use super::max_empty_rects;
-    use crate::page_layout::{find_connected_component_rects, find_text_lines, line_polygon};
-
-    /// Generate a grid of uniformly sized and spaced rects.
-    ///
-    /// `grid_shape` is a (rows, columns) tuple. `rect_size` and `gap_size` are
-    /// (height, width) tuples.
-    fn gen_rect_grid(
-        top_left: Point,
-        grid_shape: (i32, i32),
-        rect_size: (i32, i32),
-        gap_size: (i32, i32),
-    ) -> Vec<Rect> {
-        let mut rects = Vec::new();
-
-        let (rows, cols) = grid_shape;
-        let (rect_h, rect_w) = rect_size;
-        let (gap_h, gap_w) = gap_size;
-
-        for r in 0..rows {
-            for c in 0..cols {
-                let top = top_left.y + r * (rect_h + gap_h);
-                let left = top_left.x + c * (rect_w + gap_w);
-                rects.push(Rect::from_tlbr(top, left, top + rect_h, left + rect_w))
-            }
-        }
-
-        rects
-    }
+    use crate::page_layout::{find_text_lines, line_polygon};
+    use crate::test_util::gen_rect_grid;
 
     /// Return the union of `rects` or `None` if rects is empty.
     fn union_rects(rects: &[Rect]) -> Option<Rect> {
@@ -643,40 +583,6 @@ mod tests {
             max_empty_rects(&[], boundary, |r| r.area() as f32, 0, 0).next(),
             None
         );
-    }
-
-    #[test]
-    fn test_find_connected_component_rects() {
-        let mut mask = NdTensor::zeros([400, 400]);
-        let (grid_h, grid_w) = (5, 5);
-        let (rect_h, rect_w) = (10, 50);
-        let rects = gen_rect_grid(
-            Point::from_yx(10, 10),
-            (grid_h, grid_w), /* grid_shape */
-            (rect_h, rect_w), /* rect_size */
-            (10, 5),          /* gap_size */
-        );
-        for r in rects.iter() {
-            // Expand `r` because `fill_rect` does not set points along the
-            // right/bottom boundary.
-            let expanded = r.adjust_tlbr(0, 0, 1, 1);
-            fill_rect(mask.view_mut(), expanded, 1);
-        }
-
-        let components = find_connected_component_rects(mask.view(), 0.);
-        assert_eq!(components.len() as i32, grid_h * grid_w);
-        for c in components.iter() {
-            let mut shape = [c.height().round() as i32, c.width().round() as i32];
-            shape.sort();
-
-            // We sort the dimensions before comparison here to be invariant to
-            // different rotations of the connected component that cover the
-            // same pixels.
-            let mut expected_shape = [rect_h, rect_w];
-            expected_shape.sort();
-
-            assert_eq!(shape, expected_shape);
-        }
     }
 
     #[test]
