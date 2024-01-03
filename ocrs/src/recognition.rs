@@ -3,7 +3,7 @@ use std::error::Error;
 
 use rayon::prelude::*;
 use rten::ctc::{CtcDecoder, CtcHypothesis};
-use rten::{Dimension, FloatOperators, Model};
+use rten::{Dimension, FloatOperators, Model, NodeId};
 use rten_imageproc::{bounding_rect, BoundingRect, Line, Point, Polygon, Rect, RotatedRect};
 use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView, Tensor};
@@ -241,18 +241,19 @@ fn text_lines_from_recognition_results(results: &[LineRecResult]) -> Vec<Option<
         .collect()
 }
 
-/// Encapsulates validation and execution of the text line recognition model.
-pub struct RecognitionModel {
+/// Extracts character sequences and coordinates from text lines detected in
+/// an image.
+pub struct TextRecognizer {
     model: Model,
-    input_id: usize,
+    input_id: NodeId,
     input_shape: Vec<Dimension>,
-    output_id: usize,
+    output_id: NodeId,
 }
 
-impl RecognitionModel {
-    /// Validate that a model has the expected inputs and outputs for
-    /// a text recognition model and wrap it as a [RecognitionModel].
-    pub fn from_model(model: Model) -> Result<RecognitionModel, Box<dyn Error>> {
+impl TextRecognizer {
+    /// Initialize a text recognizer from a trained RTen model. Fails if the
+    /// model does not have the expected inputs or outputs.
+    pub fn from_model(model: Model) -> Result<TextRecognizer, Box<dyn Error>> {
         let input_id = model
             .input_ids()
             .first()
@@ -267,7 +268,7 @@ impl RecognitionModel {
             .first()
             .copied()
             .ok_or("recognition model has no outputs")?;
-        Ok(RecognitionModel {
+        Ok(TextRecognizer {
             model,
             input_id,
             input_shape: input_shape.into_iter().collect(),
@@ -297,134 +298,136 @@ impl RecognitionModel {
 
         Ok(rec_sequence)
     }
-}
 
-/// Recognize text lines in an image.
-///
-/// `image` is a CHW greyscale image with values in the range `ZERO_VALUE` to
-/// `ZERO_VALUE + 1`. `lines` is a list of detected text lines, where each line
-/// is a sequence of word rects. `model` is a recognition model which accepts an
-/// NCHW tensor of greyscale line images and outputs a `[sequence, batch, label]`
-/// tensor of log probabilities of character classes, which must be converted to
-/// a character sequence using CTC decoding.
-///
-/// Entries in the result can be `None` if no text was found in a line.
-pub fn recognize_text_lines(
-    image: NdTensorView<f32, 3>,
-    lines: &[Vec<RotatedRect>],
-    model: &RecognitionModel,
-    opts: RecognitionOpt,
-) -> Result<Vec<Option<TextLine>>, Box<dyn Error>> {
-    let RecognitionOpt {
-        debug,
-        decode_method,
-    } = opts;
+    /// Recognize text lines in an image.
+    ///
+    /// `image` is a CHW greyscale image with values in the range `ZERO_VALUE` to
+    /// `ZERO_VALUE + 1`. `lines` is a list of detected text lines, where each line
+    /// is a sequence of word rects. `model` is a recognition model which accepts an
+    /// NCHW tensor of greyscale line images and outputs a `[sequence, batch, label]`
+    /// tensor of log probabilities of character classes, which must be converted to
+    /// a character sequence using CTC decoding.
+    ///
+    /// Entries in the result can be `None` if no text was found in a line.
+    pub fn recognize_text_lines(
+        &self,
+        image: NdTensorView<f32, 3>,
+        lines: &[Vec<RotatedRect>],
+        opts: RecognitionOpt,
+    ) -> Result<Vec<Option<TextLine>>, Box<dyn Error>> {
+        let RecognitionOpt {
+            debug,
+            decode_method,
+        } = opts;
 
-    let [_, img_height, img_width] = image.shape();
-    let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
+        let [_, img_height, img_width] = image.shape();
+        let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
 
-    // Compute width to resize a text line image to, for a given height.
-    fn resized_line_width(orig_width: i32, orig_height: i32, height: i32) -> u32 {
-        // Min/max widths for resized line images. These must match the PyTorch
-        // `HierTextRecognition` dataset loader.
-        let min_width = 10.;
-        let max_width = 800.;
-        let aspect_ratio = orig_width as f32 / orig_height as f32;
-        (height as f32 * aspect_ratio).max(min_width).min(max_width) as u32
-    }
+        // Compute width to resize a text line image to, for a given height.
+        fn resized_line_width(orig_width: i32, orig_height: i32, height: i32) -> u32 {
+            // Min/max widths for resized line images. These must match the PyTorch
+            // `HierTextRecognition` dataset loader.
+            let min_width = 10.;
+            let max_width = 800.;
+            let aspect_ratio = orig_width as f32 / orig_height as f32;
+            (height as f32 * aspect_ratio).max(min_width).min(max_width) as u32
+        }
 
-    // Group lines into batches which will have similar widths after resizing
-    // to a fixed height.
-    //
-    // It is more efficient to run recognition on multiple lines at once, but
-    // all line images in a batch must be padded to an equal length. Some
-    // computation is wasted on shorter lines in the batch. Choosing batches
-    // such that all line images have a similar width reduces this wastage.
-    // There is a trade-off between maximizing the batch size and minimizing
-    // the variance in width of images in the batch.
-    let rec_img_height = model.input_height();
-    let mut line_groups: HashMap<i32, Vec<TextRecLine>> = HashMap::new();
-    for (line_index, word_rects) in lines.iter().enumerate() {
-        let line_rect = bounding_rect(word_rects.iter())
-            .expect("line has no words")
-            .integral_bounding_rect();
-        let resized_width =
-            resized_line_width(line_rect.width(), line_rect.height(), rec_img_height as i32);
-        let group_width = round_up(resized_width, 50);
-        line_groups
-            .entry(group_width as i32)
-            .or_default()
-            .push(TextRecLine {
-                index: line_index,
-                region: Polygon::new(line_polygon(word_rects)),
-                resized_width,
-            });
-    }
+        // Group lines into batches which will have similar widths after resizing
+        // to a fixed height.
+        //
+        // It is more efficient to run recognition on multiple lines at once, but
+        // all line images in a batch must be padded to an equal length. Some
+        // computation is wasted on shorter lines in the batch. Choosing batches
+        // such that all line images have a similar width reduces this wastage.
+        // There is a trade-off between maximizing the batch size and minimizing
+        // the variance in width of images in the batch.
+        let rec_img_height = self.input_height();
+        let mut line_groups: HashMap<i32, Vec<TextRecLine>> = HashMap::new();
+        for (line_index, word_rects) in lines.iter().enumerate() {
+            let line_rect = bounding_rect(word_rects.iter())
+                .expect("line has no words")
+                .integral_bounding_rect();
+            let resized_width =
+                resized_line_width(line_rect.width(), line_rect.height(), rec_img_height as i32);
+            let group_width = round_up(resized_width, 50);
+            line_groups
+                .entry(group_width as i32)
+                .or_default()
+                .push(TextRecLine {
+                    index: line_index,
+                    region: Polygon::new(line_polygon(word_rects)),
+                    resized_width,
+                });
+        }
 
-    // Split large line groups up into smaller batches that can be processed
-    // in parallel.
-    let max_lines_per_group = 20;
-    let line_groups: Vec<(i32, Vec<TextRecLine>)> = line_groups
-        .into_iter()
-        .flat_map(|(group_width, lines)| {
-            lines
-                .chunks(max_lines_per_group)
-                .map(|chunk| (group_width, chunk.to_vec()))
-                .collect::<Vec<_>>()
-        })
-        .collect();
+        // Split large line groups up into smaller batches that can be processed
+        // in parallel.
+        let max_lines_per_group = 20;
+        let line_groups: Vec<(i32, Vec<TextRecLine>)> = line_groups
+            .into_iter()
+            .flat_map(|(group_width, lines)| {
+                lines
+                    .chunks(max_lines_per_group)
+                    .map(|chunk| (group_width, chunk.to_vec()))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
 
-    // Run text recognition on batches of lines.
-    let mut line_rec_results: Vec<LineRecResult> = line_groups
-        .into_par_iter()
-        .flat_map(|(group_width, lines)| {
-            if debug {
-                println!(
-                    "Processing group of {} lines of width {}",
-                    lines.len(),
-                    group_width,
+        // Run text recognition on batches of lines.
+        let mut line_rec_results: Vec<LineRecResult> = line_groups
+            .into_par_iter()
+            .flat_map(|(group_width, lines)| {
+                if debug {
+                    println!(
+                        "Processing group of {} lines of width {}",
+                        lines.len(),
+                        group_width,
+                    );
+                }
+
+                let rec_input = prepare_text_line_batch(
+                    &image,
+                    &lines,
+                    page_rect,
+                    rec_img_height as usize,
+                    group_width as usize,
                 );
-            }
 
-            let rec_input = prepare_text_line_batch(
-                &image,
-                &lines,
-                page_rect,
-                rec_img_height as usize,
-                group_width as usize,
-            );
+                // TODO - Propagate errors from recognition model to caller.
+                let rec_output = self.run(rec_input).expect("recognition failed");
+                let ctc_input_len = rec_output.shape()[1];
 
-            // TODO - Propagate errors from recognition model to caller.
-            let rec_output = model.run(rec_input).expect("recognition failed");
-            let ctc_input_len = rec_output.shape()[1];
+                // Apply CTC decoding to get the label sequence for each line.
+                lines
+                    .into_iter()
+                    .enumerate()
+                    .map(|(group_line_index, line)| {
+                        let decoder = CtcDecoder::new();
+                        let input_seq = rec_output.slice([group_line_index]);
+                        let ctc_output = match decode_method {
+                            DecodeMethod::Greedy => decoder.decode_greedy(input_seq),
+                            DecodeMethod::BeamSearch { width } => {
+                                decoder.decode_beam(input_seq, width)
+                            }
+                        };
+                        LineRecResult {
+                            line,
+                            rec_input_len: group_width as usize,
+                            ctc_input_len,
+                            ctc_output,
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
 
-            // Apply CTC decoding to get the label sequence for each line.
-            lines
-                .into_iter()
-                .enumerate()
-                .map(|(group_line_index, line)| {
-                    let decoder = CtcDecoder::new();
-                    let input_seq = rec_output.slice([group_line_index]);
-                    let ctc_output = match decode_method {
-                        DecodeMethod::Greedy => decoder.decode_greedy(input_seq),
-                        DecodeMethod::BeamSearch { width } => decoder.decode_beam(input_seq, width),
-                    };
-                    LineRecResult {
-                        line,
-                        rec_input_len: group_width as usize,
-                        ctc_input_len,
-                        ctc_output,
-                    }
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect();
+        // The recognition outputs are in a different order than the inputs due to
+        // batching and parallel processing. Re-sort them into input order.
+        line_rec_results.sort_by_key(|result| result.line.index);
 
-    // The recognition outputs are in a different order than the inputs due to
-    // batching and parallel processing. Re-sort them into input order.
-    line_rec_results.sort_by_key(|result| result.line.index);
+        let text_lines = text_lines_from_recognition_results(&line_rec_results);
 
-    let text_lines = text_lines_from_recognition_results(&line_rec_results);
-
-    Ok(text_lines)
+        Ok(text_lines)
+    }
 }

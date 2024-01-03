@@ -14,10 +14,10 @@ mod text_items;
 #[cfg(target_arch = "wasm32")]
 mod wasm_api;
 
-use detection::detect_words;
+use detection::TextDetector;
 use page_layout::find_text_lines;
 use preprocess::prepare_image;
-use recognition::{recognize_text_lines, RecognitionModel, RecognitionOpt};
+use recognition::{RecognitionOpt, TextRecognizer};
 
 pub use recognition::DecodeMethod;
 pub use text_items::{TextChar, TextItem, TextLine, TextWord};
@@ -34,6 +34,7 @@ pub struct OcrEngineParams {
     /// Enable debug logging.
     pub debug: bool,
 
+    /// Method used to decode outputs of text recognition model.
     pub decode_method: DecodeMethod,
 }
 
@@ -42,8 +43,8 @@ pub struct OcrEngineParams {
 /// OcrEngine uses machine learning models to detect text, analyze layout
 /// and recognize text in an image.
 pub struct OcrEngine {
-    detection_model: Option<Model>,
-    recognition_model: Option<RecognitionModel>,
+    detector: Option<TextDetector>,
+    recognizer: Option<TextRecognizer>,
     debug: bool,
     decode_method: DecodeMethod,
 }
@@ -58,13 +59,17 @@ pub struct OcrInput {
 impl OcrEngine {
     /// Construct a new engine from a given configuration.
     pub fn new(params: OcrEngineParams) -> Result<OcrEngine, Box<dyn Error>> {
+        let detection_model = params
+            .detection_model
+            .map(TextDetector::from_model)
+            .transpose()?;
         let recognition_model = params
             .recognition_model
-            .map(RecognitionModel::from_model)
+            .map(TextRecognizer::from_model)
             .transpose()?;
         Ok(OcrEngine {
-            detection_model: params.detection_model,
-            recognition_model,
+            detector: detection_model,
+            recognizer: recognition_model,
             debug: params.debug,
             decode_method: params.decode_method,
         })
@@ -85,10 +90,10 @@ impl OcrEngine {
     /// Returns an unordered list of the oriented bounding rectangles of each
     /// word found.
     pub fn detect_words(&self, input: &OcrInput) -> Result<Vec<RotatedRect>, Box<dyn Error>> {
-        let Some(detection_model) = self.detection_model.as_ref() else {
+        let Some(detection_model) = self.detector.as_ref() else {
             return Err("Detection model not loaded".into());
         };
-        detect_words(input.image.view(), detection_model, self.debug)
+        detection_model.detect_words(input.image.view(), self.debug)
     }
 
     /// Perform layout analysis to group words into lines and sort them in
@@ -118,13 +123,12 @@ impl OcrEngine {
         input: &OcrInput,
         lines: &[Vec<RotatedRect>],
     ) -> Result<Vec<Option<TextLine>>, Box<dyn Error>> {
-        let Some(recognition_model) = self.recognition_model.as_ref() else {
+        let Some(recognition_model) = self.recognizer.as_ref() else {
             return Err("Recognition model not loaded".into());
         };
-        recognize_text_lines(
+        recognition_model.recognize_text_lines(
             input.image.view(),
             lines,
-            recognition_model,
             RecognitionOpt {
                 debug: self.debug,
                 decode_method: self.decode_method,
