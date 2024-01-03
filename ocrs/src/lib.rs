@@ -59,17 +59,17 @@ pub struct OcrInput {
 impl OcrEngine {
     /// Construct a new engine from a given configuration.
     pub fn new(params: OcrEngineParams) -> Result<OcrEngine, Box<dyn Error>> {
-        let detection_model = params
+        let detector = params
             .detection_model
             .map(TextDetector::from_model)
             .transpose()?;
-        let recognition_model = params
+        let recognizer = params
             .recognition_model
             .map(TextRecognizer::from_model)
             .transpose()?;
         Ok(OcrEngine {
-            detector: detection_model,
-            recognizer: recognition_model,
+            detector,
+            recognizer,
             debug: params.debug,
             decode_method: params.decode_method,
         })
@@ -90,10 +90,10 @@ impl OcrEngine {
     /// Returns an unordered list of the oriented bounding rectangles of each
     /// word found.
     pub fn detect_words(&self, input: &OcrInput) -> Result<Vec<RotatedRect>, Box<dyn Error>> {
-        let Some(detection_model) = self.detector.as_ref() else {
+        let Some(detector) = self.detector.as_ref() else {
             return Err("Detection model not loaded".into());
         };
-        detection_model.detect_words(input.image.view(), self.debug)
+        detector.detect_words(input.image.view(), self.debug)
     }
 
     /// Perform layout analysis to group words into lines and sort them in
@@ -123,10 +123,10 @@ impl OcrEngine {
         input: &OcrInput,
         lines: &[Vec<RotatedRect>],
     ) -> Result<Vec<Option<TextLine>>, Box<dyn Error>> {
-        let Some(recognition_model) = self.recognizer.as_ref() else {
+        let Some(recognizer) = self.recognizer.as_ref() else {
             return Err("Recognition model not loaded".into());
         };
-        recognition_model.recognize_text_lines(
+        recognizer.recognize_text_lines(
             input.image.view(),
             lines,
             RecognitionOpt {
