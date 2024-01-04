@@ -1,7 +1,6 @@
 # Ocrs
 
-**ocrs** is a new OCR engine, written in Rust. It can be used as a CLI tool and
-as a library.
+**ocrs** is a Rust library and CLI tool for extracting text from images, also known as OCR (Optical Character Recognition).
 
 The goal is to create a modern OCR engine that:
 
