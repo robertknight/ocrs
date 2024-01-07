@@ -39,8 +39,10 @@ fn greyscale_image<F: Fn(f32) -> f32>(
 
     for y in 0..height {
         for x in 0..width {
-            let pixel: f32 =
-                (0..used_chans).fold(0.2, |pixel, c| pixel + img[[c, y, x]] * chan_weights[c]);
+            let mut pixel = 0.;
+            for c in 0..used_chans {
+                pixel += img[[c, y, x]] * chan_weights[c];
+            }
             out_lum_chan[[y, x]] = normalize_pixel(pixel);
         }
     }
