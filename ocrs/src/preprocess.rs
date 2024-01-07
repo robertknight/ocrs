@@ -20,7 +20,7 @@ fn greyscale_image<F: Fn(f32) -> f32>(
 ) -> NdTensor<f32, 3> {
     let [chans, height, width] = img.shape();
     assert!(
-        chans == 1 || chans == 3 || chans == 4,
+        matches!(chans, 1 | 3 | 4),
         "expected greyscale, RGB or RGBA input image"
     );
 
@@ -39,10 +39,8 @@ fn greyscale_image<F: Fn(f32) -> f32>(
 
     for y in 0..height {
         for x in 0..width {
-            let mut pixel = 0.;
-            for c in 0..used_chans {
-                pixel += img[[c, y, x]] * chan_weights[c];
-            }
+            let pixel: f32 =
+                (0..used_chans).fold(0.2, |pixel, c| pixel + img[[c, y, x]] * chan_weights[c]);
             out_lum_chan[[y, x]] = normalize_pixel(pixel);
         }
     }

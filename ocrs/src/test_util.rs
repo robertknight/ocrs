@@ -10,11 +10,11 @@ pub fn gen_rect_grid(
     rect_size: (i32, i32),
     gap_size: (i32, i32),
 ) -> Vec<Rect> {
-    let mut rects = Vec::new();
-
     let (rows, cols) = grid_shape;
     let (rect_h, rect_w) = rect_size;
     let (gap_h, gap_w) = gap_size;
+
+    let mut rects = Vec::with_capacity((rows * cols) as usize);
 
     for r in 0..rows {
         for c in 0..cols {

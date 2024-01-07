@@ -95,10 +95,11 @@ impl OcrEngine {
     /// Returns an unordered list of the oriented bounding rectangles of each
     /// word found.
     pub fn detect_words(&self, input: &OcrInput) -> Result<Vec<RotatedRect>, Box<dyn Error>> {
-        let Some(detector) = self.detector.as_ref() else {
-            return Err("Detection model not loaded".into());
-        };
-        detector.detect_words(input.image.view(), self.debug)
+        if let Some(detector) = self.detector.as_ref() {
+            detector.detect_words(input.image.view(), self.debug)
+        } else {
+            Err("Detection model not loaded".into())
+        }
     }
 
     /// Perform layout analysis to group words into lines and sort them in
@@ -128,17 +129,18 @@ impl OcrEngine {
         input: &OcrInput,
         lines: &[Vec<RotatedRect>],
     ) -> Result<Vec<Option<TextLine>>, Box<dyn Error>> {
-        let Some(recognizer) = self.recognizer.as_ref() else {
-            return Err("Recognition model not loaded".into());
-        };
-        recognizer.recognize_text_lines(
-            input.image.view(),
-            lines,
-            RecognitionOpt {
-                debug: self.debug,
-                decode_method: self.decode_method,
-            },
-        )
+        if let Some(recognizer) = self.recognizer.as_ref() {
+            recognizer.recognize_text_lines(
+                input.image.view(),
+                lines,
+                RecognitionOpt {
+                    debug: self.debug,
+                    decode_method: self.decode_method,
+                },
+            )
+        } else {
+            Err("Recognition model not loaded".into())
+        }
     }
 
     /// Convenience API that extracts all text from an image as a single string.
