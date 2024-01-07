@@ -83,11 +83,9 @@ impl TextDetector {
         // Add batch dim
         let image = image.reshaped([1, img_chans, img_height, img_width]);
 
-        let (in_height, in_width) = match self.input_shape[..] {
-            [_, _, Dimension::Fixed(h), Dimension::Fixed(w)] => (h, w),
-            _ => {
-                return Err("failed to get model dims".into());
-            }
+        let [_, _, Dimension::Fixed(in_height), Dimension::Fixed(in_width)] = self.input_shape[..]
+        else {
+            return Err("failed to get model dims".into());
         };
 
         // Pad small images to the input size of the text detection model. This is

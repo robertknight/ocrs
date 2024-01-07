@@ -139,7 +139,7 @@ pub fn generate_annotated_png(args: GeneratePngArgs) -> NdTensor<f32, 3> {
     let floor_point = |p: PointF| Point::from_yx(p.y as i32, p.x as i32);
 
     // Draw line bounding rects from layout analysis step.
-    for line in line_rects.iter() {
+    for line in line_rects {
         let line_points: Vec<_> = line
             .iter()
             .flat_map(|word_rect| word_rect.corners().into_iter())

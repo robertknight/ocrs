@@ -92,18 +92,18 @@ pub fn find_block_separators(words: &[RotatedRect]) -> Vec<Rect> {
     lines.sort_by_key(|l| l.first().unwrap().bounding_rect().top().round() as i32);
 
     let mut all_word_spacings = Vec::new();
-    for line in lines.iter() {
+    for line in lines {
         if line.len() > 1 {
             let mut spacings: Vec<_> = zip(line.iter(), line.iter().skip(1))
                 .map(|(cur, next)| {
                     (next.bounding_rect().left() - cur.bounding_rect().right()).round() as i32
                 })
                 .collect();
-            spacings.sort();
+            spacings.sort_unstable();
             all_word_spacings.extend_from_slice(&spacings);
         }
     }
-    all_word_spacings.sort();
+    all_word_spacings.sort_unstable();
 
     let median_word_spacing = all_word_spacings
         .get(all_word_spacings.len() / 2)
@@ -111,8 +111,7 @@ pub fn find_block_separators(words: &[RotatedRect]) -> Vec<Rect> {
         .unwrap_or(10);
     let median_height = words
         .get(words.len() / 2)
-        .map(|r| r.height())
-        .unwrap_or(10.)
+        .map_or(10.0, |r| r.height())
         .round() as i32;
 
     // Scoring function for empty rectangles. Taken from Section 3.D in [1].
