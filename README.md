@@ -28,6 +28,10 @@ more details.
 ocrs is currently in an early preview. Expect more errors than commercial OCR
 engines.
 
+## Language Support
+
+ocrs currently recognizes the Latin alphabet only (eg. English). Support for more languages is [planned](https://github.com/robertknight/ocrs/issues/8). 
+
 ## CLI installation
 
 To install the CLI tool, you will first need Rust and Cargo installed. Then
