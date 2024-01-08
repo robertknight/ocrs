@@ -157,14 +157,12 @@ fn polygon_slice_bounding_rect(
             let trunc_edge_start = e
                 .to_f32()
                 .y_for_x(min_x as f32)
-                .map(|y| Point::from_yx(y.round() as i32, min_x))
-                .unwrap_or(e.start);
+                .map_or(e.start, |y| Point::from_yx(y.round() as i32, min_x));
 
             let trunc_edge_end = e
                 .to_f32()
                 .y_for_x(max_x as f32)
-                .map(|y| Point::from_yx(y.round() as i32, max_x))
-                .unwrap_or(e.end);
+                .map_or(e.end, |y| Point::from_yx(y.round() as i32, max_x));
 
             Some(Line::from_endpoints(trunc_edge_start, trunc_edge_end))
         })
@@ -370,7 +368,7 @@ impl TextRecognizer {
             let min_width = 10.;
             let max_width = 800.;
             let aspect_ratio = orig_width as f32 / orig_height as f32;
-            (height as f32 * aspect_ratio).max(min_width).min(max_width) as u32
+            (height as f32 * aspect_ratio).clamp(min_width, max_width) as u32
         }
 
         // Group lines into batches which will have similar widths after resizing
@@ -489,11 +487,7 @@ mod tests {
                 // Vary the orientation of words. The output of `line_polygon`
                 // should be invariant to different orientations of a RotatedRect
                 // that cover the same pixels.
-                let up = if i % 2 == 0 {
-                    Vec2::from_yx(-1., 0.)
-                } else {
-                    Vec2::from_yx(1., 0.)
-                };
+                let up = Vec2::from_yx(if i % 2 == 0 { -1. } else { 1. }, 0.);
                 RotatedRect::new(center, up, width, height)
             })
             .collect();

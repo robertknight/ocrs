@@ -64,7 +64,7 @@ where
             queue.push(Partition {
                 score: score(boundary),
                 boundary,
-                obstacles: obstacles.to_vec(),
+                obstacles: obstacles.clone(),
             });
         }
 

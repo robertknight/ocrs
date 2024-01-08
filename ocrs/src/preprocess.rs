@@ -20,7 +20,7 @@ fn greyscale_image<F: Fn(f32) -> f32>(
 ) -> NdTensor<f32, 3> {
     let [chans, height, width] = img.shape();
     assert!(
-        chans == 1 || chans == 3 || chans == 4,
+        matches!(chans, 1 | 3 | 4),
         "expected greyscale, RGB or RGBA input image"
     );
 

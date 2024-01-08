@@ -219,16 +219,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     let detection_model_src = args
         .detection_model
         .as_ref()
-        .map(|path| ModelSource::Path(path))
-        .unwrap_or(ModelSource::Url(DETECTION_MODEL));
+        .map_or(ModelSource::Url(DETECTION_MODEL), |path| {
+            ModelSource::Path(path)
+        });
     let detection_model = load_model(detection_model_src)
         .file_error_context("Failed to load text detection model", detection_model_src)?;
 
     let recognition_model_src = args
         .recognition_model
         .as_ref()
-        .map(|path| ModelSource::Path(path))
-        .unwrap_or(ModelSource::Url(RECOGNITION_MODEL));
+        .map_or(ModelSource::Url(RECOGNITION_MODEL), |path| {
+            ModelSource::Path(path)
+        });
     let recognition_model = load_model(recognition_model_src).file_error_context(
         "Failed to load text recognition model",
         recognition_model_src,
