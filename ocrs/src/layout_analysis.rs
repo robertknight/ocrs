@@ -1,5 +1,3 @@
-use std::iter::zip;
-
 use rten_imageproc::{bounding_rect, BoundingRect, Line, LineF, Point, Rect, RotatedRect};
 
 use crate::geom_util::{leftmost_edge, rightmost_edge};
@@ -13,7 +11,7 @@ fn rects_separated_by_line(a: &RotatedRect, b: &RotatedRect, l: LineF) -> bool {
 }
 
 /// Group rects into lines. Each line is a chain of oriented rects ordered
-/// left-to-right.
+/// left-to-right, which may overlap.
 ///
 /// `separators` is a list of line segments that prevent the formation of
 /// lines which cross them. They can be used to specify column boundaries
@@ -94,9 +92,15 @@ pub fn find_block_separators(words: &[RotatedRect]) -> Vec<Rect> {
     let mut all_word_spacings = Vec::new();
     for line in lines.iter() {
         if line.len() > 1 {
-            let mut spacings: Vec<_> = zip(line.iter(), line.iter().skip(1))
+            // `group_into_lines` sorts words in a line from left to right,
+            // but they can overlap.
+            let mut spacings: Vec<_> = line
+                .iter()
+                .zip(line.iter().skip(1))
                 .map(|(cur, next)| {
-                    (next.bounding_rect().left() - cur.bounding_rect().right()).round() as i32
+                    (next.bounding_rect().left() - cur.bounding_rect().right())
+                        .max(0.)
+                        .round() as i32
                 })
                 .collect();
             spacings.sort();
@@ -233,8 +237,59 @@ pub fn find_text_lines(words: &[RotatedRect]) -> Vec<Vec<RotatedRect>> {
 mod tests {
     use rten_imageproc::{BoundingRect, Point, Rect, RectF, RotatedRect};
 
-    use super::find_text_lines;
+    use super::{find_block_separators, find_text_lines};
     use crate::test_util::{gen_rect_grid, union_rects};
+
+    #[test]
+    fn test_find_block_separators() {
+        struct Case {
+            lines: i32,
+            words: i32,
+            word_h: i32,
+            word_w: i32,
+            line_gap: i32,
+            word_gap: i32,
+            expected_separators: usize,
+        }
+
+        let cases = [
+            // Lines with overlapping words (negative `word_gap`).
+            Case {
+                lines: 2,
+                words: 2,
+                word_h: 10,
+                word_w: 20,
+                line_gap: 50,
+                word_gap: -5,
+                expected_separators: 2,
+            },
+        ];
+
+        for Case {
+            lines,
+            words,
+            word_h,
+            word_w,
+            line_gap,
+            word_gap,
+            expected_separators,
+        } in cases
+        {
+            let words: Vec<RotatedRect> = gen_rect_grid(
+                Point::from_yx(0, 0),
+                (lines, words),
+                (word_h, word_w),
+                (line_gap, word_gap),
+            )
+            .into_iter()
+            .map(|rect| RotatedRect::from_rect(rect.to_f32()))
+            .collect();
+
+            let separators = find_block_separators(&words);
+
+            assert_eq!(separators.len(), expected_separators);
+        }
+    }
 
     #[test]
     fn test_find_text_lines() {
