@@ -2,6 +2,7 @@ use std::error::Error;
 
 use rten::Model;
 use rten_imageproc::RotatedRect;
+use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView};
 
 mod detection;

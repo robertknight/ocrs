@@ -1,4 +1,5 @@
 use rten_imageproc::{min_area_rect, Painter, Point, PointF, Rgb, RotatedRect};
+use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView};
 use serde_json::json;
 

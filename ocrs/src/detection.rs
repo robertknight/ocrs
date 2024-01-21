@@ -130,7 +130,7 @@ impl TextDetector {
         // Resize probability mask to original input size and apply threshold to get a
         // binary text/not-text mask.
         let text_mask = text_mask
-            .slice((
+            .slice::<4, _>((
                 ..,
                 ..,
                 ..(in_height - pad_bottom as usize),
@@ -146,8 +146,7 @@ impl TextDetector {
         // objects.
         let expand_dist = 3.;
 
-        let word_rects =
-            find_connected_component_rects(binary_mask.slice([0, 0]).nd_view(), expand_dist);
+        let word_rects = find_connected_component_rects(binary_mask.slice([0, 0]), expand_dist);
 
         Ok(word_rects)
     }
@@ -156,6 +155,7 @@ impl TextDetector {
 #[cfg(test)]
 mod tests {
     use rten_imageproc::{fill_rect, Point};
+    use rten_tensor::prelude::*;
     use rten_tensor::NdTensor;
 
     use super::find_connected_component_rects;
