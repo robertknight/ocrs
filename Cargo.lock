@@ -293,7 +293,7 @@ dependencies = [
 
 [[package]]
 name = "ocrs"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "fastrand",
  "lexopt",
@@ -307,7 +307,7 @@ dependencies = [
 
 [[package]]
 name = "ocrs-cli"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "home",
  "image",
