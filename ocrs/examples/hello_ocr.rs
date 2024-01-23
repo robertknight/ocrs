@@ -5,6 +5,7 @@ use std::fs;
 use ocrs::{OcrEngine, OcrEngineParams};
 use rten::Model;
 use rten_imageio::read_image;
+use rten_tensor::prelude::*;
 
 struct Args {
     image: String,
