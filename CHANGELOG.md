@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+ - Updated rten to v0.3.1. This improves performance on Arm by ~30%.
+
  - Fix panic in layout analysis when average word spacing in a line is negative
    [#20](https://github.com/robertknight/ocrs/pull/20)
 
