@@ -70,10 +70,10 @@ fn image_from_tensor(tensor: NdTensorView<f32, 3>) -> Vec<u8> {
 }
 
 struct Args {
-    /// Path to a text detection model.
+    /// Path to text detection model.
     detection_model: Option<String>,
 
-    /// Path to a text recognition model.
+    /// Path to text recognition model.
     recognition_model: Option<String>,
 
     /// Path to image to process.
@@ -89,6 +89,9 @@ struct Args {
 
     /// Use beam search for sequence decoding.
     beam_search: bool,
+
+    /// Generate a text probability map.
+    text_map: bool,
 }
 
 fn parse_args() -> Result<Args, lexopt::Error> {
@@ -101,6 +104,7 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     let mut output_format = OutputFormat::Text;
     let mut output_path = None;
     let mut recognition_model = None;
+    let mut text_map = false;
 
     let mut parser = lexopt::Parser::from_env();
     while let Some(arg) = parser.next()? {
@@ -127,6 +131,9 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             Long("rec-model") => {
                 recognition_model = Some(parser.value()?.string()?);
             }
+            Long("text-map") => {
+                text_map = true;
+            }
             Long("help") => {
                 println!(
                     "Extract text from an image.
@@ -134,10 +141,6 @@ fn parse_args() -> Result<Args, lexopt::Error> {
 Usage: {bin_name} [OPTIONS] <image>
 
 Options:
-
-  --debug
-
-    Enable debug output
 
   --detect-model <path>
 
@@ -165,9 +168,19 @@ Options:
 
 Advanced options:
 
+  (Note: These options are unstable and may change between releases)
+
   --beam
 
     Use beam search for decoding.
+
+  --debug
+
+    Enable debug logging.
+
+  --text-map
+
+    Generate a text probability map for the input image.
 ",
                     bin_name = parser.bin_name().unwrap_or("ocrs")
                 );
@@ -189,6 +202,7 @@ Advanced options:
         output_path,
         image: values.pop_front().ok_or("missing `<image>` arg")?,
         recognition_model,
+        text_map,
     })
 }
 
@@ -252,6 +266,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     })?;
 
     let ocr_input = engine.prepare_input(color_img.view())?;
+    if args.text_map {
+        let text_map = engine.detect_text_pixels(&ocr_input)?;
+        let [height, width] = text_map.shape();
+        let text_map = text_map.into_shape([1, height, width]);
+        write_image("text-map.png", text_map.view())?;
+    }
+
     let word_rects = engine.detect_words(&ocr_input)?;
     let line_rects = engine.find_text_lines(&ocr_input, &word_rects);
     let line_texts = engine.recognize_text(&ocr_input, &line_rects)?;
