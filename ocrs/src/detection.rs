@@ -3,23 +3,45 @@ use std::error::Error;
 use rten::{Dimension, FloatOperators, Model, Operators, RunOptions};
 use rten_imageproc::{find_contours, min_area_rect, simplify_polygon, RetrievalMode, RotatedRect};
 use rten_tensor::prelude::*;
-use rten_tensor::{NdTensorView, Tensor};
+use rten_tensor::{NdTensor, NdTensorView, Tensor};
 
 use crate::preprocess::BLACK_VALUE;
+
+/// Parameters that control post-processing of text detection model outputs.
+pub struct TextDetectorParams {
+    /// Threshold for minimum area of returned rectangles.
+    ///
+    /// This can be used to filter out rects created by small false positives in
+    /// the mask, at the risk of filtering out true positives. The more accurate
+    /// the model producing the mask is, the smaller this value can be.
+    pub min_area: f32,
+
+    /// Threshold for per-pixel scores in output segmentation mask for
+    /// classifying a pixel as text.
+    pub text_threshold: f32,
+}
+
+impl Default for TextDetectorParams {
+    fn default() -> TextDetectorParams {
+        // Empirically chosen parameters for the initial model release.
+        TextDetectorParams {
+            // This area is quite large and can prevent detection of small /
+            // single letter words.
+            min_area: 100.,
+
+            // Ideally the threshold would be 0.5 as a neutral value.
+            text_threshold: 0.2,
+        }
+    }
+}
 
 /// Find the minimum-area oriented rectangles containing each connected
 /// component in the binary mask `mask`.
 fn find_connected_component_rects(
     mask: NdTensorView<i32, 2>,
     expand_dist: f32,
+    min_area: f32,
 ) -> Vec<RotatedRect> {
-    // Threshold for the minimum area of returned rectangles.
-    //
-    // This can be used to filter out rects created by small false positives in
-    // the mask, at the risk of filtering out true positives. The more accurate
-    // the model producing the mask is, the less this is needed.
-    let min_area_threshold = 100.;
-
     find_contours(mask, RetrievalMode::External)
         .iter()
         .filter_map(|poly| {
@@ -34,7 +56,7 @@ fn find_connected_component_rects(
                 rect
             })
         })
-        .filter(|r| r.area() >= min_area_threshold)
+        .filter(|r| r.area() >= min_area)
         .collect()
 }
 
@@ -42,6 +64,7 @@ fn find_connected_component_rects(
 /// image.
 pub struct TextDetector {
     model: Model,
+    params: TextDetectorParams,
     input_shape: Vec<Dimension>,
 }
 
@@ -49,7 +72,10 @@ impl TextDetector {
     /// Initializate a DetectionModel from a trained RTen model.
     ///
     /// This will fail if the model doesn't have the expected inputs or outputs.
-    pub fn from_model(model: Model) -> Result<TextDetector, Box<dyn Error>> {
+    pub fn from_model(
+        model: Model,
+        params: TextDetectorParams,
+    ) -> Result<TextDetector, Box<dyn Error>> {
         let input_id = model
             .input_ids()
             .first()
@@ -60,7 +86,11 @@ impl TextDetector {
             .and_then(|info| info.shape())
             .ok_or("model does not specify expected input shape")?;
 
-        Ok(TextDetector { model, input_shape })
+        Ok(TextDetector {
+            model,
+            params,
+            input_shape,
+        })
     }
 
     /// Detect text words in a greyscale image.
@@ -78,6 +108,39 @@ impl TextDetector {
         image: NdTensorView<f32, 3>,
         debug: bool,
     ) -> Result<Vec<RotatedRect>, Box<dyn Error>> {
+        let text_mask = self.detect_text_pixels(image, debug)?;
+        let binary_mask = text_mask.map(|prob| {
+            if *prob > self.params.text_threshold {
+                1i32
+            } else {
+                0
+            }
+        });
+
+        // Distance to expand bounding boxes by. This is useful when the model is
+        // trained to assign a positive label to pixels in a smaller area than the
+        // ground truth, which may be done to create separation between adjacent
+        // objects.
+        let expand_dist = 3.;
+
+        let word_rects =
+            find_connected_component_rects(binary_mask.view(), expand_dist, self.params.min_area);
+
+        Ok(word_rects)
+    }
+
+    /// Detect text pixels in an image.
+    ///
+    /// Takes a greyscale (CHW) input image and returns a probability map
+    /// indicating whether each pixel in the input is text.
+    ///
+    /// See [detect_words](TextDetector::detect_words) for more details of
+    /// expected input.
+    pub fn detect_text_pixels(
+        &self,
+        image: NdTensorView<f32, 3>,
+        debug: bool,
+    ) -> Result<NdTensor<f32, 2>, Box<dyn Error>> {
         let [img_chans, img_height, img_width] = image.shape();
 
         // Add batch dim
@@ -137,18 +200,11 @@ impl TextDetector {
                 ..(in_width - pad_right as usize),
             ))
             .resize_image([img_height, img_width])?;
-        let threshold = 0.2;
-        let binary_mask = text_mask.map(|prob| if *prob > threshold { 1i32 } else { 0 });
 
-        // Distance to expand bounding boxes by. This is useful when the model is
-        // trained to assign a positive label to pixels in a smaller area than the
-        // ground truth, which may be done to create separation between adjacent
-        // objects.
-        let expand_dist = 3.;
+        // Remove batch, channel dims.
+        let text_mask = text_mask.into_shape([img_height, img_width]);
 
-        let word_rects = find_connected_component_rects(binary_mask.slice([0, 0]), expand_dist);
-
-        Ok(word_rects)
+        Ok(text_mask)
     }
 }
 
@@ -179,8 +235,10 @@ mod tests {
             fill_rect(mask.view_mut(), expanded, 1);
         }
 
-        let components = find_connected_component_rects(mask.view(), 0.);
+        let min_area = 100.;
+        let components = find_connected_component_rects(mask.view(), 0., min_area);
         assert_eq!(components.len() as i32, grid_h * grid_w);
+
         for c in components.iter() {
             let mut shape = [c.height().round() as i32, c.width().round() as i32];
             shape.sort();

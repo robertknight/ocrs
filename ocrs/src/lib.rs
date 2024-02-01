@@ -67,7 +67,7 @@ impl OcrEngine {
     pub fn new(params: OcrEngineParams) -> Result<OcrEngine, Box<dyn Error>> {
         let detector = params
             .detection_model
-            .map(TextDetector::from_model)
+            .map(|model| TextDetector::from_model(model, Default::default()))
             .transpose()?;
         let recognizer = params
             .recognition_model
@@ -98,6 +98,20 @@ impl OcrEngine {
     pub fn detect_words(&self, input: &OcrInput) -> Result<Vec<RotatedRect>, Box<dyn Error>> {
         if let Some(detector) = self.detector.as_ref() {
             detector.detect_words(input.image.view(), self.debug)
+        } else {
+            Err("Detection model not loaded".into())
+        }
+    }
+
+    /// Detect text pixels in an image.
+    ///
+    /// Returns an (H, W) tensor indicating the probability of each pixel in the
+    /// input being part of a text word. This is a low-level API that is useful
+    /// for debugging purposes. Use [detect_words](OcrEngine::detect_words) for
+    /// a higher-level API that returns oriented bounding boxes of words.
+    pub fn detect_text_pixels(&self, input: &OcrInput) -> Result<NdTensor<f32, 2>, Box<dyn Error>> {
+        if let Some(detector) = self.detector.as_ref() {
+            detector.detect_text_pixels(input.image.view(), self.debug)
         } else {
             Err("Detection model not loaded".into())
         }
