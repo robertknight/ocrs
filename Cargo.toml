@@ -4,6 +4,3 @@ members = [
   "ocrs",
   "ocrs-cli",
 ]
-
-[lints.clippy]
-too_many_arguments = "allow"
