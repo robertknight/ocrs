@@ -1,15 +1,16 @@
-use std::error::Error;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use anyhow::anyhow;
 use rten::Model;
 use url::Url;
 
 /// Return the path to the directory in which cached models etc. should be
 /// saved.
-fn cache_dir() -> Result<PathBuf, Box<dyn Error>> {
-    let mut cache_dir: PathBuf = home::home_dir().ok_or("failed to determine home directory")?;
+fn cache_dir() -> Result<PathBuf, anyhow::Error> {
+    let mut cache_dir: PathBuf =
+        home::home_dir().ok_or(anyhow!("Failed to determine home directory"))?;
     cache_dir.push(".cache");
     cache_dir.push("ocrs");
 
@@ -32,11 +33,11 @@ fn filename_from_url(url: &str) -> Option<String> {
 
 /// Download a file from `url` to a local cache, if not already fetched, and
 /// return the path to the local file.
-fn download_file(url: &str, filename: Option<&str>) -> Result<PathBuf, Box<dyn Error>> {
+fn download_file(url: &str, filename: Option<&str>) -> Result<PathBuf, anyhow::Error> {
     let cache_dir = cache_dir()?;
     let filename = match filename {
         Some(fname) => fname.to_string(),
-        None => filename_from_url(url).ok_or("Could not get destination filename")?,
+        None => filename_from_url(url).ok_or(anyhow!("Could not get destination filename"))?,
     };
     let file_path = cache_dir.join(filename);
     if file_path.exists() {
@@ -81,7 +82,7 @@ impl<'a> fmt::Display for ModelSource<'a> {
 ///
 /// If the source is a URL, the model will be downloaded and cached locally if
 /// needed.
-pub fn load_model(source: ModelSource) -> Result<Model, Box<dyn Error>> {
+pub fn load_model(source: ModelSource) -> Result<Model, anyhow::Error> {
     let model_path = match source {
         ModelSource::Url(url) => download_file(url, None)?,
         ModelSource::Path(path) => path.into(),
