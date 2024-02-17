@@ -24,8 +24,8 @@ test:
 
 .PHONY: test-e2e
 test-e2e:
-	# TODO - Actually check the output is correct
-	cargo run --release -p ocrs-cli ocrs-cli/test-data/why-rust.png
+	cargo run --release -p ocrs-cli ocrs-cli/test-data/why-rust.png -o /tmp/why-rust.txt
+	diff --ignore-space-change -u /tmp/why-rust.txt ocrs-cli/test-data/why-rust.expected.txt
 
 .PHONY: wasm
 wasm:
