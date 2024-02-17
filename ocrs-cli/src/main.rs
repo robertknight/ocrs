@@ -1,9 +1,9 @@
 use std::collections::VecDeque;
 use std::error::Error;
-use std::fmt;
 use std::fs;
 use std::io::BufWriter;
 
+use anyhow::{anyhow, Context};
 use ocrs::{DecodeMethod, OcrEngine, OcrEngineParams};
 use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView};
@@ -17,7 +17,7 @@ use output::{
 };
 
 /// Read an image from `path` into a CHW tensor.
-fn read_image(path: &str) -> Result<NdTensor<f32, 3>, Box<dyn Error>> {
+fn read_image(path: &str) -> anyhow::Result<NdTensor<f32, 3>> {
     let input_img = image::open(path)?;
     let input_img = input_img.into_rgb8();
 
@@ -37,14 +37,14 @@ fn read_image(path: &str) -> Result<NdTensor<f32, 3>, Box<dyn Error>> {
 }
 
 /// Write a CHW image to a PNG file in `path`.
-fn write_image(path: &str, img: NdTensorView<f32, 3>) -> Result<(), Box<dyn Error>> {
+fn write_image(path: &str, img: NdTensorView<f32, 3>) -> anyhow::Result<()> {
     let img_width = img.size(2);
     let img_height = img.size(1);
     let color_type = match img.size(0) {
         1 => png::ColorType::Grayscale,
         3 => png::ColorType::Rgb,
         4 => png::ColorType::Rgba,
-        _ => return Err("Unsupported channel count".into()),
+        chans => return Err(anyhow!("Unsupported channel count {}", chans)),
     };
 
     let hwc_img = img.permuted([1, 2, 0]); // CHW => HWC
@@ -206,19 +206,6 @@ Advanced options:
     })
 }
 
-/// Adds context to an error reading or parsing a file.
-trait FileErrorContext<T> {
-    /// If `self` represents a failed operation to read a file, convert the
-    /// error to a message of the form "{context} from {path}: {original_error}".
-    fn file_error_context<P: fmt::Display>(self, context: &str, path: P) -> Result<T, String>;
-}
-
-impl<T, E: std::fmt::Display> FileErrorContext<T> for Result<T, E> {
-    fn file_error_context<P: fmt::Display>(self, context: &str, path: P) -> Result<T, String> {
-        self.map_err(|err| format!("{} from \"{}\": {}", context, path, err))
-    }
-}
-
 /// Default text detection model.
 const DETECTION_MODEL: &str = "https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten";
 
@@ -236,8 +223,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map_or(ModelSource::Url(DETECTION_MODEL), |path| {
             ModelSource::Path(path)
         });
-    let detection_model = load_model(detection_model_src)
-        .file_error_context("Failed to load text detection model", detection_model_src)?;
+    let detection_model = load_model(detection_model_src).with_context(|| {
+        format!(
+            "Failed to load text detection model from {}",
+            detection_model_src
+        )
+    })?;
 
     let recognition_model_src = args
         .recognition_model
@@ -245,14 +236,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map_or(ModelSource::Url(RECOGNITION_MODEL), |path| {
             ModelSource::Path(path)
         });
-    let recognition_model = load_model(recognition_model_src).file_error_context(
-        "Failed to load text recognition model",
-        recognition_model_src,
-    )?;
+    let recognition_model = load_model(recognition_model_src).with_context(|| {
+        format!(
+            "Failed to load text recognition model from {}",
+            recognition_model_src
+        )
+    })?;
 
     // Read image into CHW tensor.
-    let color_img =
-        read_image(&args.image).file_error_context("Failed to read image", &args.image)?;
+    let color_img = read_image(&args.image)
+        .with_context(|| format!("Failed to read image from {}", &args.image))?;
 
     let engine = OcrEngine::new(OcrEngineParams {
         detection_model: Some(detection_model),
@@ -279,7 +272,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let write_output_str = |content: String| -> Result<(), Box<dyn Error>> {
         if let Some(output_path) = &args.output_path {
-            std::fs::write(output_path, content.into_bytes())?;
+            std::fs::write(output_path, content.into_bytes())
+                .with_context(|| format!("Failed to write output to {}", output_path))?;
         } else {
             println!("{}", content);
         }
@@ -309,7 +303,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             let Some(output_path) = args.output_path else {
                 return Err("Output path must be specified when generating annotated PNG".into());
             };
-            write_image(&output_path, annotated_img.view())?;
+            write_image(&output_path, annotated_img.view())
+                .with_context(|| format!("Failed to write output to {}", &output_path))?;
         }
     }
 
