@@ -1,3 +1,5 @@
+TMPDIR := $(or $(RUNNER_TEMP),/tmp)
+
 .PHONY: build
 build:
 	cargo build
@@ -24,8 +26,8 @@ test:
 
 .PHONY: test-e2e
 test-e2e:
-	cargo run --release -p ocrs-cli ocrs-cli/test-data/why-rust.png -o /tmp/why-rust.txt
-	diff --ignore-space-change -u /tmp/why-rust.txt ocrs-cli/test-data/why-rust.expected.txt
+	cargo run --release -p ocrs-cli ocrs-cli/test-data/why-rust.png -o $(TMPDIR)/why-rust.txt
+	diff --ignore-space-change -u $(TMPDIR)/why-rust.txt ocrs-cli/test-data/why-rust.expected.txt
 
 .PHONY: wasm
 wasm:
