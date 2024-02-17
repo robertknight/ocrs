@@ -23,7 +23,7 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             Long("help") => {
                 println!(
                     "Usage: {bin_name} <image>",
-                    bin_name = parser.bin_name().unwrap_or("detr")
+                    bin_name = parser.bin_name().unwrap_or("hello_ocrs")
                 );
                 std::process::exit(0);
             }
