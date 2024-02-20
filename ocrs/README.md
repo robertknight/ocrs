@@ -5,6 +5,11 @@ This crate contains the **ocrs** OCR engine as a library. See the
 
 [main_readme]: https://github.com/robertknight/ocrs/blob/main/README.md
 
+## Performance note
+
+Make sure you build the `ocrs` crate and its `rten*` dependencies in **release
+mode**. Debug builds of these crates will be extremely slow.
+
 ## Usage
 
 See [examples/hello_ocr.rs](./examples/hello_ocr.rs) for a minimal example of using this library in
@@ -17,5 +22,5 @@ cd examples/
 ./download-models.sh
 
 # Run OCR on an image and print the extracted text.
-cargo run -r --example hello_ocr rust-book.jpg
+cargo run --release --example hello_ocr rust-book.jpg
 ```
