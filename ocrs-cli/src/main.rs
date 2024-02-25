@@ -5,6 +5,7 @@ use std::io::BufWriter;
 
 use anyhow::{anyhow, Context};
 use ocrs::{DecodeMethod, OcrEngine, OcrEngineParams};
+use rten_imageproc::{bounding_rect, RotatedRect};
 use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView};
 
@@ -69,6 +70,30 @@ fn image_from_tensor(tensor: NdTensorView<f32, 3>) -> Vec<u8> {
         .collect()
 }
 
+/// Extract images of individual text lines from `img` and save them as PNG
+/// files in `output_dir`.
+fn write_text_line_images(
+    img: NdTensorView<f32, 3>,
+    line_rects: &[Vec<RotatedRect>],
+    output_dir: &str,
+) -> anyhow::Result<()> {
+    std::fs::create_dir_all(output_dir)
+        .with_context(|| format!("Failed to create dir {}/", output_dir))?;
+
+    for (line_index, word_rects) in line_rects.iter().enumerate() {
+        let filename = format!("{}/line-{}.png", output_dir, line_index);
+        let line_rect = bounding_rect(word_rects.iter());
+        if let Some(line_rect) = line_rect {
+            let [top, left, bottom, right] = line_rect.tlbr().map(|x| x.max(0.).round() as usize);
+            let line_img: NdTensorView<f32, 3> = img.slice((.., top..bottom, left..right));
+            write_image(&filename, line_img)
+                .with_context(|| format!("Failed to write line image to {}", filename))?;
+        }
+    }
+
+    Ok(())
+}
+
 struct Args {
     /// Path to text detection model.
     detection_model: Option<String>,
@@ -92,6 +117,9 @@ struct Args {
 
     /// Generate a text probability map.
     text_map: bool,
+
+    /// Extract each text line found and save as a PNG image.
+    text_line_images: bool,
 }
 
 fn parse_args() -> Result<Args, lexopt::Error> {
@@ -105,6 +133,7 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     let mut output_path = None;
     let mut recognition_model = None;
     let mut text_map = false;
+    let mut text_line_images = false;
 
     let mut parser = lexopt::Parser::from_env();
     while let Some(arg) = parser.next()? {
@@ -130,6 +159,9 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             }
             Long("rec-model") => {
                 recognition_model = Some(parser.value()?.string()?);
+            }
+            Long("text-line-images") => {
+                text_line_images = true;
             }
             Long("text-map") => {
                 text_map = true;
@@ -172,15 +204,19 @@ Advanced options:
 
   --beam
 
-    Use beam search for decoding.
+    Use beam search for decoding
 
   --debug
 
-    Enable debug logging.
+    Enable debug logging
 
   --text-map
 
-    Generate a text probability map for the input image.
+    Generate a text probability map for the input image
+
+  --text-line-images
+
+    Export images of identified text lines
 ",
                     bin_name = parser.bin_name().unwrap_or("ocrs")
                 );
@@ -203,6 +239,7 @@ Advanced options:
         image: values.pop_front().ok_or("missing `<image>` arg")?,
         recognition_model,
         text_map,
+        text_line_images,
     })
 }
 
@@ -267,7 +304,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let word_rects = engine.detect_words(&ocr_input)?;
+
     let line_rects = engine.find_text_lines(&ocr_input, &word_rects);
+    if args.text_line_images {
+        write_text_line_images(color_img.view(), &line_rects, "lines")?;
+    }
+
     let line_texts = engine.recognize_text(&ocr_input, &line_rects)?;
 
     let write_output_str = |content: String| -> Result<(), Box<dyn Error>> {
