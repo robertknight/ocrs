@@ -158,6 +158,28 @@ impl OcrEngine {
         }
     }
 
+    /// Prepare an image for input into the text line recognition model.
+    ///
+    /// This method exists to help with debugging recognition issues by exposing
+    /// the preprocessing that [OcrEngine::recognize_text] does before it feeds
+    /// an image into the recognition model. Use [OcrEngine::recognize_text] to
+    /// recognize text.
+    ///
+    /// `line` is a sequence of [RotatedRect]s that make up a line of text.
+    ///
+    /// Returns a greyscale (H, W) image with values in [-0.5, 0.5].
+    pub fn prepare_recognition_input(
+        &self,
+        input: &OcrInput,
+        line: &[RotatedRect],
+    ) -> Result<NdTensor<f32, 2>, Box<dyn Error>> {
+        let Some(recognizer) = self.recognizer.as_ref() else {
+            return Err("Recognition model not loaded".into());
+        };
+        let line_image = recognizer.prepare_input(input.image.view(), line);
+        Ok(line_image)
+    }
+
     /// Convenience API that extracts all text from an image as a single string.
     pub fn get_text(&self, input: &OcrInput) -> Result<String, Box<dyn Error>> {
         let word_rects = self.detect_words(input)?;
