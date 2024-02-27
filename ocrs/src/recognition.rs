@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::error::Error;
 
+use anyhow::anyhow;
 use rayon::prelude::*;
 use rten::ctc::{CtcDecoder, CtcHypothesis};
 use rten::{Dimension, FloatOperators, Model, NodeId};
@@ -69,6 +69,16 @@ fn line_polygon(words: &[RotatedRect]) -> Vec<Point> {
     polygon
 }
 
+/// Compute width to resize a text line image to, for a given height.
+fn resized_line_width(orig_width: i32, orig_height: i32, height: i32) -> u32 {
+    // Min/max widths for resized line images. These must match the PyTorch
+    // `HierTextRecognition` dataset loader.
+    let min_width = 10.;
+    let max_width = 800.;
+    let aspect_ratio = orig_width as f32 / orig_height as f32;
+    (height as f32 * aspect_ratio).clamp(min_width, max_width) as u32
+}
+
 /// Details about a text line needed to prepare the input to the text
 /// recognition model.
 #[derive(Clone)]
@@ -81,6 +91,43 @@ struct TextRecLine {
 
     /// Width to resize this line to.
     resized_width: u32,
+}
+
+fn prepare_text_line(
+    image: NdTensorView<f32, 3>,
+    page_rect: Rect,
+    line_region: &Polygon,
+    resized_width: u32,
+    output_height: usize,
+) -> NdTensor<f32, 2> {
+    // Page rect adjusted to only contain coordinates that are valid for
+    // indexing into the input image.
+    let page_index_rect = page_rect.adjust_tlbr(0, 0, -1, -1);
+
+    let grey_chan = image.slice([0]);
+
+    let line_rect = line_region.bounding_rect();
+    let mut line_img = NdTensor::full(
+        [line_rect.height() as usize, line_rect.width() as usize],
+        BLACK_VALUE,
+    );
+
+    for in_p in line_region.fill_iter() {
+        let out_p = Point::from_yx(in_p.y - line_rect.top(), in_p.x - line_rect.left());
+        if !page_index_rect.contains_point(in_p) || !page_index_rect.contains_point(out_p) {
+            continue;
+        }
+        line_img[[out_p.y as usize, out_p.x as usize]] =
+            grey_chan[[in_p.y as usize, in_p.x as usize]];
+    }
+
+    let resized_line_img = line_img
+        .reshaped([1, 1, line_img.size(0), line_img.size(1)])
+        .resize_image([output_height, resized_width as usize])
+        .unwrap();
+
+    let out_shape = [resized_line_img.size(2), resized_line_img.size(3)];
+    resized_line_img.into_shape(out_shape)
 }
 
 /// Prepare an NCHW tensor containing a batch of text line images, for input
@@ -99,36 +146,14 @@ fn prepare_text_line_batch(
 ) -> NdTensor<f32, 4> {
     let mut output = NdTensor::full([lines.len(), 1, output_height, output_width], BLACK_VALUE);
 
-    // Page rect adjusted to only contain coordinates that are valid for
-    // indexing into the input image.
-    let page_index_rect = page_rect.adjust_tlbr(0, 0, -1, -1);
-
     for (group_line_index, line) in lines.iter().enumerate() {
-        let grey_chan = image.slice([0]);
-
-        let line_rect = line.region.bounding_rect();
-        let mut line_img = NdTensor::full(
-            [line_rect.height() as usize, line_rect.width() as usize],
-            BLACK_VALUE,
+        let resized_line_img = prepare_text_line(
+            image.view(),
+            page_rect,
+            &line.region,
+            line.resized_width,
+            output_height,
         );
-
-        for in_p in line.region.fill_iter() {
-            let out_p = Point::from_yx(in_p.y - line_rect.top(), in_p.x - line_rect.left());
-            if !page_index_rect.contains_point(in_p) || !page_index_rect.contains_point(out_p) {
-                continue;
-            }
-            line_img[[out_p.y as usize, out_p.x as usize]] =
-                grey_chan[[in_p.y as usize, in_p.x as usize]];
-        }
-
-        let resized_line_img = line_img
-            .reshaped([1, 1, line_img.size(0), line_img.size(1)])
-            .resize_image([output_height, line.resized_width as usize])
-            .unwrap();
-
-        let resized_line_img: NdTensorView<f32, 2> =
-            resized_line_img.squeezed().try_into().unwrap();
-
         output
             .slice_mut((group_line_index, 0, .., ..(line.resized_width as usize)))
             .copy_from(&resized_line_img);
@@ -291,21 +316,21 @@ pub struct TextRecognizer {
 impl TextRecognizer {
     /// Initialize a text recognizer from a trained RTen model. Fails if the
     /// model does not have the expected inputs or outputs.
-    pub fn from_model(model: Model) -> Result<TextRecognizer, Box<dyn Error>> {
+    pub fn from_model(model: Model) -> anyhow::Result<TextRecognizer> {
         let input_id = model
             .input_ids()
             .first()
             .copied()
-            .ok_or("recognition model has no inputs")?;
+            .ok_or(anyhow!("recognition model has no inputs"))?;
         let input_shape = model
             .node_info(input_id)
             .and_then(|info| info.shape())
-            .ok_or("recognition model does not specify input shape")?;
+            .ok_or(anyhow!("recognition model does not specify input shape"))?;
         let output_id = model
             .output_ids()
             .first()
             .copied()
-            .ok_or("recognition model has no outputs")?;
+            .ok_or(anyhow!("recognition model has no outputs"))?;
         Ok(TextRecognizer {
             model,
             input_id,
@@ -324,7 +349,7 @@ impl TextRecognizer {
 
     /// Run text recognition on an NCHW batch of text line images, and return
     /// a `[batch, seq, label]` tensor of class probabilities.
-    fn run(&self, input: NdTensor<f32, 4>) -> Result<NdTensor<f32, 3>, Box<dyn Error>> {
+    fn run(&self, input: NdTensor<f32, 4>) -> anyhow::Result<NdTensor<f32, 3>> {
         let input: Tensor<f32> = input.into();
         let [output] =
             self.model
@@ -335,6 +360,38 @@ impl TextRecognizer {
         rec_sequence.permute([1, 0, 2]);
 
         Ok(rec_sequence)
+    }
+
+    /// Prepare a text line for input into the recognition model.
+    ///
+    /// This method exists for model debugging purposes to expose the
+    /// preprocessing that [TextRecognizer::recognize_text_lines] does.
+    pub fn prepare_input(
+        &self,
+        image: NdTensorView<f32, 3>,
+        line: &[RotatedRect],
+    ) -> NdTensor<f32, 2> {
+        // These lines should match corresponding code in
+        // `recognize_text_lines`.
+        let [_, img_height, img_width] = image.shape();
+        let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
+
+        let line_rect = bounding_rect(line.iter())
+            .expect("line has no words")
+            .integral_bounding_rect();
+
+        let line_poly = Polygon::new(line_polygon(line));
+        let rec_img_height = self.input_height();
+        let resized_width =
+            resized_line_width(line_rect.width(), line_rect.height(), rec_img_height as i32);
+
+        prepare_text_line(
+            image,
+            page_rect,
+            &line_poly,
+            resized_width,
+            rec_img_height as usize,
+        )
     }
 
     /// Recognize text lines in an image.
@@ -352,7 +409,7 @@ impl TextRecognizer {
         image: NdTensorView<f32, 3>,
         lines: &[Vec<RotatedRect>],
         opts: RecognitionOpt,
-    ) -> Result<Vec<Option<TextLine>>, Box<dyn Error>> {
+    ) -> anyhow::Result<Vec<Option<TextLine>>> {
         let RecognitionOpt {
             debug,
             decode_method,
@@ -360,16 +417,6 @@ impl TextRecognizer {
 
         let [_, img_height, img_width] = image.shape();
         let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
-
-        // Compute width to resize a text line image to, for a given height.
-        fn resized_line_width(orig_width: i32, orig_height: i32, height: i32) -> u32 {
-            // Min/max widths for resized line images. These must match the PyTorch
-            // `HierTextRecognition` dataset loader.
-            let min_width = 10.;
-            let max_width = 800.;
-            let aspect_ratio = orig_width as f32 / orig_height as f32;
-            (height as f32 * aspect_ratio).clamp(min_width, max_width) as u32
-        }
 
         // Group lines into batches which will have similar widths after resizing
         // to a fixed height.

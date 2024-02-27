@@ -4,8 +4,8 @@ use std::fs;
 use std::io::BufWriter;
 
 use anyhow::{anyhow, Context};
-use ocrs::{DecodeMethod, OcrEngine, OcrEngineParams};
-use rten_imageproc::{bounding_rect, RotatedRect};
+use ocrs::{DecodeMethod, OcrEngine, OcrEngineParams, OcrInput};
+use rten_imageproc::RotatedRect;
 use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView};
 
@@ -70,10 +70,12 @@ fn image_from_tensor(tensor: NdTensorView<f32, 3>) -> Vec<u8> {
         .collect()
 }
 
-/// Extract images of individual text lines from `img` and save them as PNG
-/// files in `output_dir`.
-fn write_text_line_images(
-    img: NdTensorView<f32, 3>,
+/// Extract images of individual text lines from `img`, apply the same
+/// preprocessing that would be applied before text recognition, and save
+/// in PNG format to `output_dir`.
+fn write_preprocessed_text_line_images(
+    input: &OcrInput,
+    engine: &OcrEngine,
     line_rects: &[Vec<RotatedRect>],
     output_dir: &str,
 ) -> anyhow::Result<()> {
@@ -82,13 +84,12 @@ fn write_text_line_images(
 
     for (line_index, word_rects) in line_rects.iter().enumerate() {
         let filename = format!("{}/line-{}.png", output_dir, line_index);
-        let line_rect = bounding_rect(word_rects.iter());
-        if let Some(line_rect) = line_rect {
-            let [top, left, bottom, right] = line_rect.tlbr().map(|x| x.max(0.).round() as usize);
-            let line_img: NdTensorView<f32, 3> = img.slice((.., top..bottom, left..right));
-            write_image(&filename, line_img)
-                .with_context(|| format!("Failed to write line image to {}", filename))?;
-        }
+        let mut line_img = engine.prepare_recognition_input(input, word_rects.as_slice())?;
+        line_img.apply(|x| x + 0.5);
+        let shape = [1, line_img.size(0), line_img.size(1)];
+        let line_img = line_img.into_shape(shape);
+        write_image(&filename, line_img.view())
+            .with_context(|| format!("Failed to write line image to {}", filename))?;
     }
 
     Ok(())
@@ -307,7 +308,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let line_rects = engine.find_text_lines(&ocr_input, &word_rects);
     if args.text_line_images {
-        write_text_line_images(color_img.view(), &line_rects, "lines")?;
+        write_preprocessed_text_line_images(&ocr_input, &engine, &line_rects, "lines")?;
+        // write_text_line_images(color_img.view(), &line_rects, "lines")?;
     }
 
     let line_texts = engine.recognize_text(&ocr_input, &line_rects)?;
