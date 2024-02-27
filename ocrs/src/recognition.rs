@@ -71,10 +71,16 @@ fn line_polygon(words: &[RotatedRect]) -> Vec<Point> {
 
 /// Compute width to resize a text line image to, for a given height.
 fn resized_line_width(orig_width: i32, orig_height: i32, height: i32) -> u32 {
-    // Min/max widths for resized line images. These must match the PyTorch
-    // `HierTextRecognition` dataset loader.
     let min_width = 10.;
-    let max_width = 800.;
+
+    // A larger maximum width avoids horizontally squashing long input lines,
+    // affecting accuracy. However it also increases the processing time.
+    //
+    // The current value was chosen to be large enough to produce good results
+    // on screenshots taken from the longest lines in English Wikipedia articles
+    // (image size approx 1860x30, 150 characters).
+    let max_width = 2400.;
+
     let aspect_ratio = orig_width as f32 / orig_height as f32;
     (height as f32 * aspect_ratio).clamp(min_width, max_width) as u32
 }

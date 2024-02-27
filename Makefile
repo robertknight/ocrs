@@ -26,8 +26,12 @@ test:
 
 .PHONY: test-e2e
 test-e2e:
+	# Simple test case
 	cargo run --release -p ocrs-cli ocrs-cli/test-data/why-rust.png -o $(TMPDIR)/why-rust.txt
 	diff --ignore-space-change -u $(TMPDIR)/why-rust.txt ocrs-cli/test-data/why-rust.expected.txt
+	# Long lines
+	cargo run --release -p ocrs-cli ocrs-cli/test-data/polar-bears.png -o $(TMPDIR)/polar-bears.txt
+	diff --ignore-space-change -u $(TMPDIR)/polar-bears.txt ocrs-cli/test-data/polar-bears.expected.txt
 
 .PHONY: wasm
 wasm:
