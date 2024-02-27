@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::error::Error;
 
+use anyhow::anyhow;
 use rayon::prelude::*;
 use rten::ctc::{CtcDecoder, CtcHypothesis};
 use rten::{Dimension, FloatOperators, Model, NodeId};
@@ -316,21 +316,21 @@ pub struct TextRecognizer {
 impl TextRecognizer {
     /// Initialize a text recognizer from a trained RTen model. Fails if the
     /// model does not have the expected inputs or outputs.
-    pub fn from_model(model: Model) -> Result<TextRecognizer, Box<dyn Error>> {
+    pub fn from_model(model: Model) -> anyhow::Result<TextRecognizer> {
         let input_id = model
             .input_ids()
             .first()
             .copied()
-            .ok_or("recognition model has no inputs")?;
+            .ok_or(anyhow!("recognition model has no inputs"))?;
         let input_shape = model
             .node_info(input_id)
             .and_then(|info| info.shape())
-            .ok_or("recognition model does not specify input shape")?;
+            .ok_or(anyhow!("recognition model does not specify input shape"))?;
         let output_id = model
             .output_ids()
             .first()
             .copied()
-            .ok_or("recognition model has no outputs")?;
+            .ok_or(anyhow!("recognition model has no outputs"))?;
         Ok(TextRecognizer {
             model,
             input_id,
@@ -349,7 +349,7 @@ impl TextRecognizer {
 
     /// Run text recognition on an NCHW batch of text line images, and return
     /// a `[batch, seq, label]` tensor of class probabilities.
-    fn run(&self, input: NdTensor<f32, 4>) -> Result<NdTensor<f32, 3>, Box<dyn Error>> {
+    fn run(&self, input: NdTensor<f32, 4>) -> anyhow::Result<NdTensor<f32, 3>> {
         let input: Tensor<f32> = input.into();
         let [output] =
             self.model
@@ -409,7 +409,7 @@ impl TextRecognizer {
         image: NdTensorView<f32, 3>,
         lines: &[Vec<RotatedRect>],
         opts: RecognitionOpt,
-    ) -> Result<Vec<Option<TextLine>>, Box<dyn Error>> {
+    ) -> anyhow::Result<Vec<Option<TextLine>>> {
         let RecognitionOpt {
             debug,
             decode_method,

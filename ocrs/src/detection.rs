@@ -1,5 +1,4 @@
-use std::error::Error;
-
+use anyhow::anyhow;
 use rten::{Dimension, FloatOperators, Model, Operators, RunOptions};
 use rten_imageproc::{find_contours, min_area_rect, simplify_polygon, RetrievalMode, RotatedRect};
 use rten_tensor::prelude::*;
@@ -72,19 +71,16 @@ impl TextDetector {
     /// Initializate a DetectionModel from a trained RTen model.
     ///
     /// This will fail if the model doesn't have the expected inputs or outputs.
-    pub fn from_model(
-        model: Model,
-        params: TextDetectorParams,
-    ) -> Result<TextDetector, Box<dyn Error>> {
+    pub fn from_model(model: Model, params: TextDetectorParams) -> anyhow::Result<TextDetector> {
         let input_id = model
             .input_ids()
             .first()
             .copied()
-            .ok_or("model has no inputs")?;
+            .ok_or(anyhow!("model has no inputs"))?;
         let input_shape = model
             .node_info(input_id)
             .and_then(|info| info.shape())
-            .ok_or("model does not specify expected input shape")?;
+            .ok_or(anyhow!("model does not specify expected input shape"))?;
 
         Ok(TextDetector {
             model,
@@ -107,7 +103,7 @@ impl TextDetector {
         &self,
         image: NdTensorView<f32, 3>,
         debug: bool,
-    ) -> Result<Vec<RotatedRect>, Box<dyn Error>> {
+    ) -> anyhow::Result<Vec<RotatedRect>> {
         let text_mask = self.detect_text_pixels(image, debug)?;
         let binary_mask = text_mask.map(|prob| {
             if *prob > self.params.text_threshold {
@@ -140,7 +136,7 @@ impl TextDetector {
         &self,
         image: NdTensorView<f32, 3>,
         debug: bool,
-    ) -> Result<NdTensor<f32, 2>, Box<dyn Error>> {
+    ) -> anyhow::Result<NdTensor<f32, 2>> {
         let [img_chans, img_height, img_width] = image.shape();
 
         // Add batch dim
@@ -148,7 +144,7 @@ impl TextDetector {
 
         let [_, _, Dimension::Fixed(in_height), Dimension::Fixed(in_width)] = self.input_shape[..]
         else {
-            return Err("failed to get model dims".into());
+            return Err(anyhow!("failed to get model dims"));
         };
 
         // Pad small images to the input size of the text detection model. This is
