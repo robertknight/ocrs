@@ -79,6 +79,10 @@ fn resized_line_width(orig_width: i32, orig_height: i32, height: i32) -> u32 {
     // The current value was chosen to be large enough to produce good results
     // on screenshots taken from the longest lines in English Wikipedia articles
     // (image size approx 1860x30, 150 characters).
+    //
+    // The widest image seen during training may be constrained to a shorter
+    // value than this, but we rely on the model's ability to generalize to
+    // longer sequences.
     let max_width = 2400.;
 
     let aspect_ratio = orig_width as f32 / orig_height as f32;
