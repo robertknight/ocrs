@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+ - Improve recognition accuracy for long text lines, at the cost of longer
+   inference times, by increasing max image width after preprocessing
+   [#32](https://github.com/robertknight/ocrs/pull/32)
+
+ - Added `--text-line-images` option to save previews of text lines after
+   preprocessing. This is useful for debugging recognition accuracy issues
+   [#29](https://github.com/robertknight/ocrs/pull/29),
+   [#30](https://github.com/robertknight/ocrs/pull/30).
+
+ - Added a note in the README about the importance of building ocrs (or at least
+   the rten dependencies) in release mode
+   [#28](https://github.com/robertknight/ocrs/pull/28)
+
+ - Updated rten to 0.4.0. This includes optimizations for post-processing of
+   the text segmentation mask [#23](https://github.com/robertknight/ocrs/pull/23).
+
 ## [0.4.0] - 2024-01-23
 
  - Updated rten to v0.3.1. This improves performance on Arm by ~30%.
