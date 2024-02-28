@@ -30,7 +30,8 @@ engines.
 
 ## Language Support
 
-ocrs currently recognizes the Latin alphabet only (eg. English). Support for more languages is [planned](https://github.com/robertknight/ocrs/issues/8). 
+ocrs currently recognizes the Latin alphabet only (eg. English). Support for
+more languages is [planned](https://github.com/robertknight/ocrs/issues/8). 
 
 ## CLI installation
 
@@ -41,7 +42,7 @@ run:
 $ cargo install ocrs-cli
 ```
 
-## CLI usage:
+## CLI usage
 
 To extract text from an image, run:
 
@@ -72,6 +73,11 @@ Annotate an image to show the location of detected words and lines:
 $ ocrs image.png --png -o annotated.png
 ````
 
+## Library usage
+
+See the [ocrs crate README](ocrs/) for details on how to use ocrs as a Rust
+library.
+
 ## Models and datasets
 
 ocrs uses neural network models written in PyTorch. See the
@@ -91,7 +97,24 @@ cd ocrs
 cargo run -p ocrs-cli -r -- image.png
 ```
 
-### Library installation
+### Testing
 
-See the [ocrs crate README](ocrs/) for details on how to use ocrs as a Rust
-library.
+Ocrs has unit tests for the code that runs before and after ML model processing,
+plus E2E tests which exercise the whole pipeline, including models.
+
+After making changes to the code, run unit tests and lint checks with:
+
+```sh
+make check
+```
+
+You can also run standard commands like `cargo test` directly.
+
+Run the E2E tests with:
+
+```sh
+make test-e2e
+```
+
+For details of how the ML models are evaluated, see the
+[ocrs-models](https://github.com/robertknight/ocrs-models) repository.
