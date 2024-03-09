@@ -119,6 +119,9 @@ struct Args {
     /// Generate a text probability map.
     text_map: bool,
 
+    /// Generate a text mask. This is the binarized version of the probability map.
+    text_mask: bool,
+
     /// Extract each text line found and save as a PNG image.
     text_line_images: bool,
 }
@@ -134,6 +137,7 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     let mut output_path = None;
     let mut recognition_model = None;
     let mut text_map = false;
+    let mut text_mask = false;
     let mut text_line_images = false;
 
     let mut parser = lexopt::Parser::from_env();
@@ -166,6 +170,9 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             }
             Long("text-map") => {
                 text_map = true;
+            }
+            Long("text-mask") => {
+                text_mask = true;
             }
             Long("help") => {
                 println!(
@@ -211,13 +218,17 @@ Advanced options:
 
     Enable debug logging
 
+  --text-line-images
+
+    Export images of identified text lines
+
   --text-map
 
     Generate a text probability map for the input image
 
-  --text-line-images
+  --text-mask
 
-    Export images of identified text lines
+    Generate a binary text mask for the input image
 ",
                     bin_name = parser.bin_name().unwrap_or("ocrs")
                 );
@@ -240,6 +251,7 @@ Advanced options:
         image: values.pop_front().ok_or("missing `<image>` arg")?,
         recognition_model,
         text_map,
+        text_mask,
         text_line_images,
     })
 }
@@ -297,11 +309,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     })?;
 
     let ocr_input = engine.prepare_input(color_img.view())?;
-    if args.text_map {
+    if args.text_map || args.text_mask {
         let text_map = engine.detect_text_pixels(&ocr_input)?;
         let [height, width] = text_map.shape();
         let text_map = text_map.into_shape([1, height, width]);
-        write_image("text-map.png", text_map.view())?;
+        if args.text_map {
+            write_image("text-map.png", text_map.view())?;
+        }
+
+        if args.text_mask {
+            let threshold = engine.detection_threshold();
+            let text_mask = text_map.map(|x| if *x > threshold { 1. } else { 0. });
+            write_image("text-mask.png", text_mask.view())?;
+        }
     }
 
     let word_rects = engine.detect_words(&ocr_input)?;
