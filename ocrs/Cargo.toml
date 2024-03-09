@@ -16,7 +16,9 @@ rten-imageproc = { version = "0.4.0" }
 rten-tensor = { version = "0.4.0" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "0.2.87"
+# nb. When changing this, make sure the version of wasm-bindgen-cli installed
+# in CI etc. is in sync.
+wasm-bindgen = "0.2.89"
 
 [dev-dependencies]
 fastrand = "1.9.0"
