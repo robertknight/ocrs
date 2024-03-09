@@ -23,7 +23,7 @@ jobs:
           target/
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
     - name: Install wasm-bindgen
-      run: which wasm-bindgen || cargo install wasm-bindgen-cli
+      run: cargo install wasm-bindgen-cli --version 0.2.87
     - name: Build
       run: cargo build
     - name: WASM build
