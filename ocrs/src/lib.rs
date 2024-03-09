@@ -19,7 +19,7 @@ mod text_items;
 #[cfg(target_arch = "wasm32")]
 mod wasm_api;
 
-use detection::TextDetector;
+use detection::{TextDetector, TextDetectorParams};
 use layout_analysis::find_text_lines;
 use preprocess::prepare_image;
 use recognition::{RecognitionOpt, TextRecognizer};
@@ -177,6 +177,15 @@ impl OcrEngine {
         };
         let line_image = recognizer.prepare_input(input.image.view(), line);
         Ok(line_image)
+    }
+
+    /// Return the confidence threshold applied to the output of the text
+    /// detection model to determine whether a pixel is text or not.
+    pub fn detection_threshold(&self) -> f32 {
+        self.detector
+            .as_ref()
+            .map(|detector| detector.threshold())
+            .unwrap_or(TextDetectorParams::default().text_threshold)
     }
 
     /// Convenience API that extracts all text from an image as a single string.

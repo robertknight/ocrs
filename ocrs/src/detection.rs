@@ -7,6 +7,7 @@ use rten_tensor::{NdTensor, NdTensorView, Tensor};
 use crate::preprocess::BLACK_VALUE;
 
 /// Parameters that control post-processing of text detection model outputs.
+#[derive(Clone, Debug, PartialEq)]
 pub struct TextDetectorParams {
     /// Threshold for minimum area of returned rectangles.
     ///
@@ -87,6 +88,12 @@ impl TextDetector {
             params,
             input_shape,
         })
+    }
+
+    /// Return the confidence threshold used to determine whether a pixel is
+    /// text or not.
+    pub fn threshold(&self) -> f32 {
+        self.params.text_threshold
     }
 
     /// Detect text words in a greyscale image.
