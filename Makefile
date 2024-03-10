@@ -14,6 +14,10 @@ check: checkformatting test lint
 checkformatting:
 	cargo fmt --check
 
+.PHONY: docs
+doc:
+	cargo doc
+
 .PHONY: lint
 lint:
 	cargo clippy --workspace
