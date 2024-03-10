@@ -25,3 +25,7 @@ anyhow = "1.0.79"
 [[bin]]
 name = "ocrs"
 path = "src/main.rs"
+
+# Disable documentation for ocrs binary to avoid a filename conflict in
+# `target/doc/` with docs for the ocrs library crate.
+doc = false

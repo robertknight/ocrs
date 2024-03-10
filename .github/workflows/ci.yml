@@ -34,5 +34,7 @@ jobs:
       run: |
         make checkformatting
         make lint
+    - name: Docs
+      run: make doc
     - name: E2E Test
       run: make test-e2e
