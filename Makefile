@@ -18,6 +18,11 @@ checkformatting:
 doc:
 	cargo doc
 
+.PHONY: run-example
+example:
+	cd ocrs/examples && ./download-models.sh
+	cargo run -p ocrs --release --example hello_ocr ocrs/examples/rust-book.jpg
+
 .PHONY: lint
 lint:
 	cargo clippy --workspace
