@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 import re
 import os
 from subprocess import run
 import sys
+import textwrap
 import time
 
 
@@ -28,7 +29,7 @@ def extract_text(image_path: str) -> str:
 IMAGE_PAT = "\\.(jpeg|jpg|png|webp)$"
 
 
-def run_tests(test_case_dir: str) -> bool:
+def run_tests(test_case_dir: str, *, verbose=False) -> bool:
     """
     Compare extracted text for image files against expectations.
 
@@ -60,8 +61,15 @@ def run_tests(test_case_dir: str) -> bool:
         text = text.strip()
 
         if text != expected_text:
-            print(f"Actual vs expected mismatch for {fname}")
             errors += 1
+
+            print(f"Actual vs expected mismatch for {fname}")
+
+            if verbose:
+                print("Actual:")
+                print(textwrap.indent(text, "  "))
+                print("Expected:")
+                print(textwrap.indent(expected_text, "  "))
 
     if errors != 0:
         print(f"{errors} tests failed")
@@ -78,11 +86,14 @@ expectations in `{imagename}.expected.txt` files.
 """
 )
 parser.add_argument("dir", help="Directory containing test images and expected outputs")
+parser.add_argument(
+    "-v", "--verbose", action=BooleanOptionalAction, help="Enable verbose logging"
+)
 args = parser.parse_args()
 
 print("Building ocrs...")
 build_ocrs()
-passed = run_tests(args.dir)
+passed = run_tests(args.dir, verbose=args.verbose)
 
 if not passed:
     sys.exit(1)
