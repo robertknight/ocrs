@@ -73,7 +73,7 @@ def run_global_retrieval_eval(max_samples: int) -> None:
     X_ocrs = vectorizer.transform(text_pred_ocrs)
 
     print(
-        " - ocrs: {:.2f} s / image, precision {:.2f}, recall {:.2f}, F1 {:.2f}".format(
+        " - Ocrs: {:.2f} s / image, precision {:.2f}, recall {:.2f}, F1 {:.2f}".format(
             time_ocrs / max_samples,
             precision_score(X_true, X_ocrs, average="micro"),
             recall_score(X_true, X_ocrs, average="micro"),
