@@ -53,8 +53,8 @@ def run_global_retrieval_eval(max_samples: int) -> bool:
     X_true = vectorizer.fit_transform(true_text[:max_samples])
 
     # Evaluate with orcs
-    text_pred_orcs = []
-    time_orcs = 0
+    text_pred_ocrs = []
+    time_ocrs = 0
 
     # Use a tempfs if available (Linux, MacOS) to reduce disk I/O overhead
     TMP_DIR = Path("/dev/shm")
@@ -74,7 +74,7 @@ def run_global_retrieval_eval(max_samples: int) -> bool:
             text_pred_orcs.append(extract_text(tmp_file.name))
             time_orcs += time.perf_counter() - t0
 
-    X_orcs = vectorizer.transform(text_pred_orcs)
+    X_ocrs = vectorizer.transform(text_pred_ocrs)
 
     print(
         " - ORCS: {:.2f} s / image, precision {:.2f}, recall {:.2f}, F1 {:.2f}".format(
