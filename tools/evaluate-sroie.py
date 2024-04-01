@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 
+import tempfile
+import time
 from argparse import ArgumentParser
 from pathlib import Path
 from subprocess import run
-import datasets
-import time
-import tempfile
-from tqdm import tqdm
 
+import datasets
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import f1_score, precision_score, recall_score
+from tqdm import tqdm
 
 try:
     import pytesseract
@@ -34,7 +34,7 @@ def extract_text(image_path: str) -> str:
     return result.stdout
 
 
-def run_global_retrieval_eval(max_samples: int) -> bool:
+def run_global_retrieval_eval(max_samples: int) -> None:
     """
     Evaluate OCR performance, by computing precision, recall and F1 score
     for the detected tokens globally on the whole document
@@ -52,36 +52,32 @@ def run_global_retrieval_eval(max_samples: int) -> bool:
 
     X_true = vectorizer.fit_transform(true_text[:max_samples])
 
-    # Evaluate with orcs
+    # Evaluate with ocrs
     text_pred_ocrs = []
     time_ocrs = 0
 
-    # Use a tempfs if available (Linux, MacOS) to reduce disk I/O overhead
-    TMP_DIR = Path("/dev/shm")
-    if not TMP_DIR.exists():
-        TMP_DIR = None
 
     for idx, data_el in tqdm(enumerate(dataset)):
         if idx >= max_samples:
             break
 
         with tempfile.NamedTemporaryFile(
-            dir=TMP_DIR, suffix=".jpg", delete=False
+            suffix=".jpg", delete=False
         ) as tmp_file:
             data_el["image"].save(tmp_file, format="JPEG")
 
             t0 = time.perf_counter()
-            text_pred_orcs.append(extract_text(tmp_file.name))
-            time_orcs += time.perf_counter() - t0
+            text_pred_ocrs.append(extract_text(tmp_file.name))
+            time_ocrs += time.perf_counter() - t0
 
     X_ocrs = vectorizer.transform(text_pred_ocrs)
 
     print(
-        " - ORCS: {:.2f} s / image, precision {:.2f}, recall {:.2f}, F1 {:.2f}".format(
-            time_orcs / max_samples,
-            precision_score(X_true, X_orcs, average="micro"),
-            recall_score(X_true, X_orcs, average="micro"),
-            f1_score(X_true, X_orcs, average="micro"),
+        " - ocrs: {:.2f} s / image, precision {:.2f}, recall {:.2f}, F1 {:.2f}".format(
+            time_ocrs / max_samples,
+            precision_score(X_true, X_ocrs, average="micro"),
+            recall_score(X_true, X_ocrs, average="micro"),
+            f1_score(X_true, X_ocrs, average="micro"),
         )
     )
     if pytesseract is not None:
@@ -113,7 +109,7 @@ def run_global_retrieval_eval(max_samples: int) -> bool:
 
 parser = ArgumentParser(
     description="""
-Evaluate orcs on the benchmark datasets
+Evaluate ocrs on the benchmark datasets
 
 To run this script, you need, to install dependencies:
     pip install scikit-learn datasets tqdm
