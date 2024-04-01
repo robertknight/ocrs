@@ -48,7 +48,8 @@ def run_global_retrieval_eval(max_samples: int) -> None:
     print("Evaluating on SROIE 2019 dataset...")
 
     # Build the vocabulary on the ground truth
-    vectorizer = CountVectorizer(input="content", binary=True)
+    # Here we use a whitespace tokenizer as documented in the SROIE 2019 paper
+    vectorizer = CountVectorizer(input="content", token_pattern=r'[^\s]+', binary=True)
 
     X_true = vectorizer.fit_transform(true_text[:max_samples])
 
