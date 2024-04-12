@@ -11,9 +11,9 @@ repository = "https://github.com/robertknight/ocrs"
 [dependencies]
 anyhow = "1.0.80"
 rayon = "1.7.0"
-rten = { version = "0.6.0" }
-rten-imageproc = { version = "0.6.0" }
-rten-tensor = { version = "0.6.0" }
+rten = { version = "0.7.0" }
+rten-imageproc = { version = "0.7.0" }
+rten-tensor = { version = "0.7.0" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # nb. When changing this, make sure the version of wasm-bindgen-cli installed
@@ -23,7 +23,7 @@ wasm-bindgen = "0.2.89"
 [dev-dependencies]
 fastrand = "1.9.0"
 lexopt = "0.3.0"
-rten-imageio = { version = "0.6.0" }
+rten-imageio = { version = "0.7.0" }
 
 [lib]
 crate-type = ["lib", "cdylib"]
