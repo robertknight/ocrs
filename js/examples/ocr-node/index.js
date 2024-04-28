@@ -1,3 +1,6 @@
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { readFile } from "fs/promises";
 
 import { program } from "commander";
@@ -84,10 +87,13 @@ program
   .option("-j, --json", "Output JSON")
   .action(
     async (detectionModelPath, recognitionModelPath, imagePath, options) => {
+      const scriptDir = dirname(fileURLToPath(import.meta.url));
+      const wasmPath = `${scriptDir}/../../dist/ocrs_bg.wasm`;
+
       // Concurrently load the OCR library, text detection and recognition models,
       // and input image.
       const [_, detectionModel, recognitionModel, image] = await Promise.all([
-        readFile("dist/ocrs_bg.wasm").then(initOcrLib),
+        readFile(wasmPath).then(initOcrLib),
         readFile(detectionModelPath).then((data) => new Uint8Array(data)),
         readFile(recognitionModelPath).then((data) => new Uint8Array(data)),
         loadImage(imagePath),
