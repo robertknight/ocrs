@@ -1,5 +1,5 @@
 {
-  "name": "ocrs",
+  "name": "@robertknight/ocrs",
   "version": "0.1.0",
   "description": "Ocrs is a library for extracting text from images",
   "type": "module",
