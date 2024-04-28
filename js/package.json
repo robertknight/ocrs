@@ -1,0 +1,14 @@
+{
+  "name": "ocrs",
+  "version": "0.1.0",
+  "description": "Ocrs is a library for extracting text from images",
+  "type": "module",
+  "main": "dist/ocrs.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "files": ["dist/**"],
+  "keywords": ["OCR"],
+  "author": "Robert Knight <robertknight@gmail.com>",
+  "license": "MIT"
+}
