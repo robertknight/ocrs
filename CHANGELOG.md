@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2024-04-29
+
+ - Updated rten to v0.8.0. This fixes a crash on x86-64 CPUs that don't support
+   AVX2 instructions and includes several performance improvements
+   [#53](https://github.com/robertknight/ocrs/pull/53).
+
+ - Added `--text-mask` flag to CLI which saves a binarized version of the text
+   probability mask as an image (https://github.com/robertknight/ocrs/pull/38)
+
+ - Made it easier to run examples (https://github.com/robertknight/ocrs/pull/41)
+
 ## [0.5.0] - 2024-02-28
 
  - Improve recognition accuracy for long text lines, at the cost of longer
