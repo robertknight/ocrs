@@ -409,24 +409,25 @@ dependencies = [
 
 [[package]]
 name = "rten"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91c24b8e959f0aba1893b254621128509689508fbceef5e8fb3f0e36967fa31a"
+checksum = "ed8c84990cfa2d35011d40e0a8f5ad6d1a877dd80f513f04a2a070445cdd82f2"
 dependencies = [
  "flatbuffers",
  "libm",
  "rayon",
  "rten-tensor",
  "rten-vecmath",
+ "rustc-hash",
  "smallvec",
  "wasm-bindgen",
 ]
 
 [[package]]
 name = "rten-imageio"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5998fc139ada9b28e8114fb3923a841f797b162005d7a2439fc64e8aa663614"
+checksum = "e2cf8a71d80e033c9549a5cfd46353c792017525390130f9e0b5be33bf017e18"
 dependencies = [
  "image",
  "png",
@@ -435,27 +436,33 @@ dependencies = [
 
 [[package]]
 name = "rten-imageproc"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63f9fb2f449b6fa71fc92cce55733b1707f19fe6acf9ddb39cc474d7c5e7cafa"
+checksum = "6d26fd4e8299e8c9b37affb04836a6d1ac67fee62a157a7b06b3cdc9d9b66e40"
 dependencies = [
  "rten-tensor",
 ]
 
 [[package]]
 name = "rten-tensor"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48e1ec84bc0e1af4afac3eb90538ae484c89478f3f8cbda37ed048453360c5f4"
+checksum = "4d2541dfaf69014c2e730f8386fc9647ddc0c3381b1fe21ce1640f0ed4f74357"
 dependencies = [
  "smallvec",
 ]
 
 [[package]]
 name = "rten-vecmath"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b6ccb4c50101424b77a0d9c93434783df475f2d55107f034ec98ee0885dfcb6"
+checksum = "fc89d64420a5b7a7d74e3b5cc9424029a2ce86906cdaed50491c44e6f1a090f8"
+
+[[package]]
+name = "rustc-hash"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
 name = "rustc_version"
