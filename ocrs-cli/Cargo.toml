@@ -22,6 +22,10 @@ url = "2.4.0"
 home = "0.5.9"
 anyhow = "1.0.79"
 
+[features]
+# Use AVX-512 instructions if available. Requires nightly Rust.
+avx512 = ["rten/avx512"]
+
 [[bin]]
 name = "ocrs"
 path = "src/main.rs"

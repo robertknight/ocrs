@@ -27,3 +27,7 @@ rten-imageio = { version = "0.8.0" }
 
 [lib]
 crate-type = ["lib", "cdylib"]
+
+[features]
+# Use AVX-512 instructions if available. Requires nightly Rust.
+avx512 = ["rten/avx512"]
