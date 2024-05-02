@@ -102,8 +102,8 @@ pub fn format_json_output(args: FormatJsonArgs) -> String {
 
 /// Arguments for [generate_annotated_png].
 pub struct GeneratePngArgs<'a> {
-    /// Input image as a (channels, height, width) tensor.
-    pub img: NdTensorView<'a, f32, 3>,
+    /// Input image as a (height, width, channels) tensor.
+    pub img: NdTensorView<'a, u8, 3>,
 
     /// Lines of text detected by OCR engine.
     pub line_rects: &'a [Vec<RotatedRect>],
@@ -119,7 +119,8 @@ pub fn generate_annotated_png(args: GeneratePngArgs) -> NdTensor<f32, 3> {
         line_rects,
         text_lines,
     } = args;
-    let mut annotated_img = img.to_tensor();
+    // HWC u8 => CHW f32
+    let mut annotated_img = img.permuted([2, 0, 1]).map(|pixel| *pixel as f32 / 255.0);
     let mut painter = Painter::new(annotated_img.view_mut());
 
     // Colors chosen from https://www.w3.org/wiki/CSS/Properties/color/keywords.
@@ -247,7 +248,7 @@ mod tests {
 
     #[test]
     fn test_generate_annotated_png() {
-        let img = NdTensor::zeros([3, 64, 64]);
+        let img = NdTensor::zeros([64, 64, 3]);
         let text_lines = &[
             Some(TextLine::new(gen_text_chars("line one", 10))),
             Some(TextLine::new(gen_text_chars("line one", 10))),
@@ -266,6 +267,6 @@ mod tests {
 
         let annotated = generate_annotated_png(args);
 
-        assert_eq!(annotated.shape(), img.shape());
+        assert_eq!(annotated.shape(), img.permuted([2, 0, 1]).shape());
     }
 }

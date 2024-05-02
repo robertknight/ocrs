@@ -3,9 +3,9 @@ use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
 
-use ocrs::{OcrEngine, OcrEngineParams};
+use ocrs::{ImageSource, OcrEngine, OcrEngineParams};
 use rten::Model;
-use rten_imageio::read_image;
+#[allow(unused)]
 use rten_tensor::prelude::*;
 
 struct Args {
@@ -60,13 +60,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         ..Default::default()
     })?;
 
-    // Read image using image-rs library and convert to a
-    // (channels, height, width) tensor with f32 values in [0, 1].
-    let image = read_image(&args.image)?;
+    // Read image using image-rs library, and convert to RGB if not already
+    // in that format.
+    let img = image::open(&args.image).map(|image| image.into_rgb8())?;
 
     // Apply standard image pre-processing expected by this library (convert
     // to greyscale, map range to [-0.5, 0.5]).
-    let ocr_input = engine.prepare_input(image.view())?;
+    let img_source = ImageSource::from_bytes(img.as_raw(), img.dimensions())?;
+    let ocr_input = engine.prepare_input(img_source)?;
 
     // Detect and recognize text. If you only need the text and don't need any
     // layout information, you can also use `engine.get_text(&ocr_input)`,
