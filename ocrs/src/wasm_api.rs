@@ -5,9 +5,8 @@ use rten::{Model, OpRegistry};
 
 use rten_imageproc::{min_area_rect, BoundingRect, PointF};
 use rten_tensor::prelude::*;
-use rten_tensor::NdTensorView;
 
-use crate::{OcrEngine as BaseOcrEngine, OcrEngineParams, OcrInput, TextItem};
+use crate::{ImageSource, OcrEngine as BaseOcrEngine, OcrEngineParams, OcrInput, TextItem};
 
 /// Options for constructing an [OcrEngine].
 #[wasm_bindgen]
@@ -112,24 +111,11 @@ impl OcrEngine {
     /// API. Supported channel combinations are RGB and RGBA. The number of
     /// channels is inferred from the length of `data`.
     #[wasm_bindgen(js_name = loadImage)]
-    pub fn load_image(&self, width: usize, height: usize, data: &[u8]) -> Result<Image, String> {
-        let pixels_per_chan = height * width;
-        let channels = data.len() / pixels_per_chan;
-
-        if ![1, 3, 4].contains(&channels) {
-            return Err("expected channel count to be 1, 3 or 4".to_string());
-        }
-
-        let shape = [height, width, channels];
-        if data.len() < shape.iter().product() {
-            return Err("incorrect data length for image size and channel count".to_string());
-        }
-
-        let tensor = NdTensorView::from_data(shape, data)
-            .permuted([2, 0, 1]) // HWC => CHW
-            .map(|x| (*x as f32) / 255.);
+    pub fn load_image(&self, width: u32, height: u32, data: &[u8]) -> Result<Image, String> {
+        let image_source =
+            ImageSource::from_bytes(data, (width, height)).map_err(|err| err.to_string())?;
         self.engine
-            .prepare_input(tensor.view())
+            .prepare_input(image_source)
             .map(|input| Image { input })
             .map_err(|e| e.to_string())
     }

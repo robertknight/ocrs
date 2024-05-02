@@ -303,12 +303,13 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "fastrand",
+ "image",
  "lexopt",
  "rayon",
  "rten",
- "rten-imageio",
  "rten-imageproc",
  "rten-tensor",
+ "thiserror",
  "wasm-bindgen",
 ]
 
@@ -421,17 +422,6 @@ dependencies = [
  "rustc-hash",
  "smallvec",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "rten-imageio"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2cf8a71d80e033c9549a5cfd46353c792017525390130f9e0b5be33bf017e18"
-dependencies = [
- "image",
- "png",
- "rten-tensor",
 ]
 
 [[package]]
@@ -575,6 +565,26 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "thiserror"
+version = "1.0.59"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0126ad08bff79f29fc3ae6a55cc72352056dfff61e3ff8bb7129476d44b23aa"
+dependencies = [
+ "thiserror-impl",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "1.0.59"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1cd413b5d558b4c5bf3680e324a6fa5014e7b7c067a51e69dbdf47eb7148b66"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

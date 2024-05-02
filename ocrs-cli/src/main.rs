@@ -4,7 +4,7 @@ use std::fs;
 use std::io::BufWriter;
 
 use anyhow::{anyhow, Context};
-use ocrs::{DecodeMethod, OcrEngine, OcrEngineParams, OcrInput};
+use ocrs::{DecodeMethod, DimOrder, ImageSource, OcrEngine, OcrEngineParams, OcrInput};
 use rten_imageproc::RotatedRect;
 use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView};
@@ -16,26 +16,6 @@ use output::{
     format_json_output, format_text_output, generate_annotated_png, FormatJsonArgs,
     GeneratePngArgs, OutputFormat,
 };
-
-/// Read an image from `path` into a CHW tensor.
-fn read_image(path: &str) -> anyhow::Result<NdTensor<f32, 3>> {
-    let input_img = image::open(path)?;
-    let input_img = input_img.into_rgb8();
-
-    let (width, height) = input_img.dimensions();
-
-    let in_chans = 3;
-    let mut float_img = NdTensor::zeros([in_chans, height as usize, width as usize]);
-    for c in 0..in_chans {
-        let mut chan_img = float_img.slice_mut([c]);
-        for y in 0..height {
-            for x in 0..width {
-                chan_img[[y as usize, x as usize]] = input_img.get_pixel(x, y)[c] as f32 / 255.0
-            }
-        }
-    }
-    Ok(float_img)
-}
 
 /// Write a CHW image to a PNG file in `path`.
 fn write_image(path: &str, img: NdTensorView<f32, 3>) -> anyhow::Result<()> {
@@ -293,10 +273,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
     })?;
 
-    // Read image into CHW tensor.
-    let color_img = read_image(&args.image)
-        .with_context(|| format!("Failed to read image from {}", &args.image))?;
-
+    // Initialize OCR engine.
     let engine = OcrEngine::new(OcrEngineParams {
         detection_model: Some(detection_model),
         recognition_model: Some(recognition_model),
@@ -308,7 +285,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         },
     })?;
 
-    let ocr_input = engine.prepare_input(color_img.view())?;
+    // Read image into HWC tensor.
+    let color_img: NdTensor<u8, 3> = image::open(&args.image)
+        .map(|image| {
+            let image = image.into_rgb8();
+            let (width, height) = image.dimensions();
+            let in_chans = 3;
+            NdTensor::from_data(
+                [height as usize, width as usize, in_chans],
+                image.into_vec(),
+            )
+        })
+        .with_context(|| format!("Failed to read image from {}", &args.image))?;
+
+    // Preprocess image for use with OCR engine.
+    let color_img_source = ImageSource::from_tensor(color_img.view(), DimOrder::Hwc)?;
+    let ocr_input = engine.prepare_input(color_img_source)?;
+
     if args.text_map || args.text_mask {
         let text_map = engine.detect_text_pixels(&ocr_input)?;
         let [height, width] = text_map.shape();

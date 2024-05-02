@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use rten::Model;
 use rten_imageproc::RotatedRect;
 use rten_tensor::prelude::*;
-use rten_tensor::{NdTensor, NdTensorView};
+use rten_tensor::NdTensor;
 
 mod detection;
 mod geom_util;
@@ -24,6 +24,7 @@ use layout_analysis::find_text_lines;
 use preprocess::prepare_image;
 use recognition::{RecognitionOpt, TextRecognizer};
 
+pub use preprocess::{DimOrder, ImagePixels, ImageSource, ImageSourceError};
 pub use recognition::DecodeMethod;
 pub use text_items::{TextChar, TextItem, TextLine, TextWord};
 
@@ -81,10 +82,7 @@ impl OcrEngine {
     }
 
     /// Preprocess an image for use with other methods of the engine.
-    ///
-    /// The input `image` should be a CHW tensor with values in the range 0-1
-    /// and either 1 (grey), 3 (RGB) or 4 (RGBA) channels.
-    pub fn prepare_input(&self, image: NdTensorView<f32, 3>) -> anyhow::Result<OcrInput> {
+    pub fn prepare_input(&self, image: ImageSource) -> anyhow::Result<OcrInput> {
         Ok(OcrInput {
             image: prepare_image(image),
         })
@@ -214,7 +212,7 @@ mod tests {
     use rten_tensor::prelude::*;
     use rten_tensor::{NdTensor, Tensor};
 
-    use super::{OcrEngine, OcrEngineParams};
+    use super::{DimOrder, ImageSource, OcrEngine, OcrEngineParams};
 
     /// Generate a dummy CHW input image for OCR processing.
     ///
@@ -357,7 +355,7 @@ mod tests {
             recognition_model: None,
             ..Default::default()
         })?;
-        let input = engine.prepare_input(image.view())?;
+        let input = engine.prepare_input(ImageSource::from_tensor(image.view(), DimOrder::Chw)?)?;
 
         let [chans, height, width] = input.image.shape();
         assert_eq!(chans, 1);
@@ -376,7 +374,7 @@ mod tests {
             recognition_model: None,
             ..Default::default()
         })?;
-        let input = engine.prepare_input(image.view())?;
+        let input = engine.prepare_input(ImageSource::from_tensor(image.view(), DimOrder::Chw)?)?;
         let words = engine.detect_words(&input)?;
 
         assert_eq!(words.len(), n_words);
@@ -418,7 +416,7 @@ mod tests {
             recognition_model: Some(fake_recognition_model()),
             ..Default::default()
         })?;
-        let input = engine.prepare_input(image.view())?;
+        let input = engine.prepare_input(ImageSource::from_tensor(image.view(), DimOrder::Chw)?)?;
 
         // Create a dummy input line with a single word which fills the image.
         let mut line_regions: Vec<Vec<RotatedRect>> = Vec::new();
