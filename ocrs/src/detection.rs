@@ -5,6 +5,7 @@ use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView, Tensor};
 
 use crate::preprocess::BLACK_VALUE;
+use crate::tensor_util::IntoCow;
 
 /// Parameters that control post-processing of text detection model outputs.
 #[derive(Clone, Debug, PartialEq)]
@@ -165,22 +166,28 @@ impl TextDetector {
         // inputs, within some limits.
         let pad_bottom = (in_height as i32 - img_height as i32).max(0);
         let pad_right = (in_width as i32 - img_width as i32).max(0);
-        let grey_img = if pad_bottom > 0 || pad_right > 0 {
-            let pads = &[0, 0, 0, 0, 0, 0, pad_bottom, pad_right];
-            image.pad(pads.into(), BLACK_VALUE)?
-        } else {
-            image.as_dyn().to_tensor()
-        };
+        let image = (pad_bottom > 0 || pad_right > 0)
+            .then(|| {
+                let pads = &[0, 0, 0, 0, 0, 0, pad_bottom, pad_right];
+                image.pad(pads.into(), BLACK_VALUE)
+            })
+            .transpose()?
+            .map(|t| t.into_cow())
+            .unwrap_or(image.into_dyn().into_cow());
 
         // Resize images to the text detection model's input size.
-        let resized_grey_img = grey_img.resize_image([in_height, in_width])?;
+        let image = (image.size(2) != in_height || image.size(3) != in_width)
+            .then(|| image.resize_image([in_height, in_width]))
+            .transpose()?
+            .map(|t| t.into_cow())
+            .unwrap_or(image);
 
         // Run text detection model to compute a probability mask indicating whether
         // each pixel is part of a text word or not.
         let text_mask: Tensor<f32> = self
             .model
             .run_one(
-                (&resized_grey_img).into(),
+                image.view().into(),
                 if debug {
                     Some(RunOptions {
                         timing: true,

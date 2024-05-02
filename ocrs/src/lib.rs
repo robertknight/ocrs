@@ -11,6 +11,8 @@ mod log;
 mod preprocess;
 mod recognition;
 
+mod tensor_util;
+
 #[cfg(test)]
 mod test_util;
 
