@@ -325,7 +325,7 @@ mod tests {
             .map(|r| RotatedRect::from_rect(r.to_f32()))
             .collect();
 
-        let rng = fastrand::Rng::with_seed(1234);
+        let mut rng = fastrand::Rng::with_seed(1234);
         rng.shuffle(&mut words);
         let lines = find_text_lines(&words);
 
