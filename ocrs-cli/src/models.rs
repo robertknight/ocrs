@@ -87,7 +87,6 @@ pub fn load_model(source: ModelSource) -> Result<Model, anyhow::Error> {
         ModelSource::Url(url) => download_file(url, None)?,
         ModelSource::Path(path) => path.into(),
     };
-    let model_bytes = fs::read(model_path)?;
-    let model = Model::load(&model_bytes)?;
+    let model = Model::load_file(model_path)?;
     Ok(model)
 }
