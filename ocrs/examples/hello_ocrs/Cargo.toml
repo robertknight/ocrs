@@ -1,0 +1,17 @@
+[package]
+name = "hello_ocrs"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "hello_ocr"
+path = "src/hello_ocr.rs"
+
+[dependencies]
+image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "webp"] }
+ocrs = { path = "../../../ocrs" }
+rten = "0.8.0"
+rten-tensor = "0.8.0"
+lexopt = "0.3.0"
+
+[workspace]

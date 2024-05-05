@@ -48,8 +48,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = parse_args()?;
 
     // Use the `download-models.sh` script to download the models.
-    let detection_model_data = read_file("examples/text-detection.rten")?;
-    let rec_model_data = read_file("examples/text-recognition.rten")?;
+    let detection_model_data = read_file("text-detection.rten")?;
+    let rec_model_data = read_file("text-recognition.rten")?;
 
     let detection_model = Model::load(&detection_model_data)?;
     let recognition_model = Model::load(&rec_model_data)?;
@@ -62,11 +62,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Read image using image-rs library, and convert to RGB if not already
     // in that format.
-    let img = image::open(&args.image).map(|image| image.into_rgb8())?;
+    let img = image::open(args.image).map(|image| image.into_rgb8())?;
 
     // Apply standard image pre-processing expected by this library (convert
     // to greyscale, map range to [-0.5, 0.5]).
-    let img_source = ImageSource::from_bytes(img.as_raw(), img.dimensions())?;
+    let img_source = ImageSource::from_bytes(&img, img.dimensions())?;
     let ocr_input = engine.prepare_input(img_source)?;
 
     // Detect and recognize text. If you only need the text and don't need any

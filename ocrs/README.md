@@ -12,15 +12,15 @@ mode**. Debug builds of these crates will be extremely slow.
 
 ## Usage
 
-See [examples/hello_ocr.rs](./examples/hello_ocr.rs) for a minimal example of using this library in
+See [examples/hello_ocr/](./examples/hello_ocr/README.md) for a minimal example of using this library in
 a Rust application.
 
 ```sh
-cd examples/
+cd examples/hello_ocr
 
 # Download models in .rten format.
 ./download-models.sh
 
 # Run OCR on an image and print the extracted text.
-cargo run --release --example hello_ocr rust-book.jpg
+cargo run --release rust-book.jpg
 ```
