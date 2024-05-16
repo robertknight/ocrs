@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2024-05-16
+
+### Breaking changes
+
+The APIs for loading models and images have changed in this release to make them
+more efficient and easier to use. See the updated
+[hello_ocr](https://github.com/robertknight/ocrs/blob/main/ocrs/examples/hello_ocr.rs)
+example.
+
+### Changes
+
+ - Updated rten to v0.9.0. This brings a simpler API for loading models from
+   disk (`Model::load_file`) and improves performance
+   (https://github.com/robertknight/ocrs/pull/76)
+
+ - Updated image crate. This includes a much faster JPEG decoder
+   (https://github.com/robertknight/ocrs/pull/58)
+
+ - Re-designed the API for loading images to be easier to use and more
+   efficient (https://github.com/robertknight/ocrs/pull/56).
+
 ## [0.6.0] - 2024-04-29
 
  - Updated rten to v0.8.0. This fixes a crash on x86-64 CPUs that don't support
