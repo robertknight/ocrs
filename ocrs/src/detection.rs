@@ -5,7 +5,6 @@ use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView, Tensor};
 
 use crate::preprocess::BLACK_VALUE;
-use crate::tensor_util::IntoCow;
 
 /// Parameters that control post-processing of text detection model outputs.
 #[derive(Clone, Debug, PartialEq)]
@@ -39,7 +38,7 @@ impl Default for TextDetectorParams {
 /// Find the minimum-area oriented rectangles containing each connected
 /// component in the binary mask `mask`.
 fn find_connected_component_rects(
-    mask: NdTensorView<i32, 2>,
+    mask: NdTensorView<bool, 2>,
     expand_dist: f32,
     min_area: f32,
 ) -> Vec<RotatedRect> {
@@ -113,13 +112,7 @@ impl TextDetector {
         debug: bool,
     ) -> anyhow::Result<Vec<RotatedRect>> {
         let text_mask = self.detect_text_pixels(image, debug)?;
-        let binary_mask = text_mask.map(|prob| {
-            if *prob > self.params.text_threshold {
-                1i32
-            } else {
-                0
-            }
-        });
+        let binary_mask = text_mask.map(|prob| *prob > self.params.text_threshold);
 
         // Distance to expand bounding boxes by. This is useful when the model is
         // trained to assign a positive label to pixels in a smaller area than the
@@ -173,7 +166,7 @@ impl TextDetector {
             })
             .transpose()?
             .map(|t| t.into_cow())
-            .unwrap_or(image.into_dyn().into_cow());
+            .unwrap_or(image.as_dyn().as_cow());
 
         // Resize images to the text detection model's input size.
         let image = (image.size(2) != in_height || image.size(3) != in_width)
@@ -242,7 +235,7 @@ mod tests {
             // Expand `r` because `fill_rect` does not set points along the
             // right/bottom boundary.
             let expanded = r.adjust_tlbr(0, 0, 1, 1);
-            fill_rect(mask.view_mut(), expanded, 1);
+            fill_rect(mask.view_mut(), expanded, true);
         }
 
         let min_area = 100.;

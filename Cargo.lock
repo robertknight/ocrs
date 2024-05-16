@@ -378,9 +378,9 @@ dependencies = [
 
 [[package]]
 name = "rten"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed8c84990cfa2d35011d40e0a8f5ad6d1a877dd80f513f04a2a070445cdd82f2"
+checksum = "cb9d6d80601e57cab46f477955be6e3be1a4c92ed0aebb3376e1f19d24e83bb1"
 dependencies = [
  "flatbuffers",
  "libm",
@@ -394,27 +394,27 @@ dependencies = [
 
 [[package]]
 name = "rten-imageproc"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d26fd4e8299e8c9b37affb04836a6d1ac67fee62a157a7b06b3cdc9d9b66e40"
+checksum = "529fdef25f8232ebb08fb6cfc785ec97a7fb268bebc4895e36e8750e2bbeaa51"
 dependencies = [
  "rten-tensor",
 ]
 
 [[package]]
 name = "rten-tensor"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d2541dfaf69014c2e730f8386fc9647ddc0c3381b1fe21ce1640f0ed4f74357"
+checksum = "ffa78180a98337a43163e9da8f202120e9ae3b82366cccfb05a5a854e48cd581"
 dependencies = [
  "smallvec",
 ]
 
 [[package]]
 name = "rten-vecmath"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc89d64420a5b7a7d74e3b5cc9424029a2ce86906cdaed50491c44e6f1a090f8"
+checksum = "495f48d459768d61ca37b418f79ac7aac3a707024c79fa49a14dd2c1ad8a2c0e"
 
 [[package]]
 name = "rustc-hash"

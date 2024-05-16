@@ -11,9 +11,9 @@ repository = "https://github.com/robertknight/ocrs"
 [dependencies]
 anyhow = "1.0.80"
 rayon = "1.10.0"
-rten = { version = "0.8.0" }
-rten-imageproc = { version = "0.8.0" }
-rten-tensor = { version = "0.8.0" }
+rten = { version = "0.9.0" }
+rten-imageproc = { version = "0.9.0" }
+rten-tensor = { version = "0.9.0" }
 thiserror = "1.0.59"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

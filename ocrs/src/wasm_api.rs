@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::*;
 
 use rten::ops;
-use rten::{Model, OpRegistry};
+use rten::{Model, ModelOptions, OpRegistry};
 
 use rten_imageproc::{min_area_rect, BoundingRect, PointF};
 use rten_tensor::prelude::*;
@@ -11,7 +11,6 @@ use crate::{ImageSource, OcrEngine as BaseOcrEngine, OcrEngineParams, OcrInput, 
 /// Options for constructing an [OcrEngine].
 #[wasm_bindgen]
 pub struct OcrEngineInit {
-    op_registry: OpRegistry,
     detection_model: Option<Model>,
     recognition_model: Option<Model>,
 }
@@ -26,6 +25,13 @@ impl Default for OcrEngineInit {
 impl OcrEngineInit {
     #[wasm_bindgen(constructor)]
     pub fn new() -> OcrEngineInit {
+        OcrEngineInit {
+            detection_model: None,
+            recognition_model: None,
+        }
+    }
+
+    fn op_registry() -> OpRegistry {
         let mut reg = OpRegistry::new();
 
         // Register all the operators the OCR models currently use.
@@ -50,25 +56,25 @@ impl OcrEngineInit {
         reg.register_op::<ops::Transpose>();
         reg.register_op::<ops::Unsqueeze>();
 
-        OcrEngineInit {
-            op_registry: reg,
-            detection_model: None,
-            recognition_model: None,
-        }
+        reg
     }
 
     /// Load a model for text detection.
     #[wasm_bindgen(js_name = setDetectionModel)]
-    pub fn set_detection_model(&mut self, data: &[u8]) -> Result<(), String> {
-        let model = Model::load_with_ops(data, &self.op_registry).map_err(|e| e.to_string())?;
+    pub fn set_detection_model(&mut self, data: Vec<u8>) -> Result<(), String> {
+        let model = ModelOptions::with_ops(Self::op_registry())
+            .load(data)
+            .map_err(|e| e.to_string())?;
         self.detection_model = Some(model);
         Ok(())
     }
 
     /// Load a model for text recognition.
     #[wasm_bindgen(js_name = setRecognitionModel)]
-    pub fn set_recognition_model(&mut self, data: &[u8]) -> Result<(), String> {
-        let model = Model::load_with_ops(data, &self.op_registry).map_err(|e| e.to_string())?;
+    pub fn set_recognition_model(&mut self, data: Vec<u8>) -> Result<(), String> {
+        let model = ModelOptions::with_ops(Self::op_registry())
+            .load(data)
+            .map_err(|e| e.to_string())?;
         self.recognition_model = Some(model);
         Ok(())
     }
@@ -92,7 +98,6 @@ impl OcrEngine {
         let OcrEngineInit {
             detection_model,
             recognition_model,
-            op_registry: _op_registry,
         } = init;
         let engine = BaseOcrEngine::new(OcrEngineParams {
             detection_model,

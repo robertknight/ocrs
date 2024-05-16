@@ -1,6 +1,5 @@
 use std::collections::VecDeque;
 use std::error::Error;
-use std::fs;
 use std::path::PathBuf;
 
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams};
@@ -37,22 +36,22 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     Ok(Args { image })
 }
 
-/// Read a file from a path that is relative to the crate root.
-fn read_file(path: &str) -> Result<Vec<u8>, std::io::Error> {
+/// Given a file path relative to the crate root, return the absolute path.
+fn file_path(path: &str) -> PathBuf {
     let mut abs_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     abs_path.push(path);
-    fs::read(abs_path)
+    abs_path
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = parse_args()?;
 
     // Use the `download-models.sh` script to download the models.
-    let detection_model_data = read_file("examples/text-detection.rten")?;
-    let rec_model_data = read_file("examples/text-recognition.rten")?;
+    let detection_model_path = file_path("examples/text-detection.rten");
+    let rec_model_path = file_path("examples/text-recognition.rten");
 
-    let detection_model = Model::load(&detection_model_data)?;
-    let recognition_model = Model::load(&rec_model_data)?;
+    let detection_model = Model::load_file(detection_model_path)?;
+    let recognition_model = Model::load_file(rec_model_path)?;
 
     let engine = OcrEngine::new(OcrEngineParams {
         detection_model: Some(detection_model),
