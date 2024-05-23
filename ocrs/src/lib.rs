@@ -5,6 +5,7 @@ use rten_tensor::prelude::*;
 use rten_tensor::NdTensor;
 
 mod detection;
+mod errors;
 mod geom_util;
 mod layout_analysis;
 mod log;
