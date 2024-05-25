@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2024-05-25
+
+### Breaking changes
+
+This release changes Ocrs's internal use of threads, which may affect consumers
+that are using their own parallelism. Specifically Ocrs no longer uses the
+global Rayon thread pool but instead a custom thread pool which is sized to
+match the number of physical rather than logical cores. See
+https://github.com/robertknight/ocrs/pull/79 for more details and information on
+adapting.
+
+### Changes
+
+- Updated rten to v0.10.0. This improves performance when recognizing long lines
+  of text (https://github.com/robertknight/ocrs/pull/79) and improves efficiency
+  by setting the number of threads to match the number of physical cores.
+
+- Errors that occur when running the text recognition model are now propagated
+  to the caller instead of causing a panic (https://github.com/robertknight/ocrs/pull/77)
+
 ## [0.7.0] - 2024-05-16
 
 ### Breaking changes
