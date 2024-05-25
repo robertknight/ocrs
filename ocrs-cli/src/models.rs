@@ -1,13 +1,18 @@
 use std::fmt;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::{fs, path::Path};
 
 use anyhow::anyhow;
 use rten::Model;
+
+#[cfg(not(target_arch = "wasm32"))]
 use url::Url;
 
 /// Return the path to the directory in which cached models etc. should be
 /// saved.
+#[cfg(not(target_arch = "wasm32"))]
 fn cache_dir() -> Result<PathBuf, anyhow::Error> {
     let mut cache_dir: PathBuf =
         home::home_dir().ok_or(anyhow!("Failed to determine home directory"))?;
@@ -22,6 +27,7 @@ fn cache_dir() -> Result<PathBuf, anyhow::Error> {
 /// Extract the last path segment from a URL.
 ///
 /// eg. "https://models.com/text-detection.rten" => "text-detection.rten".
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(rustdoc::bare_urls)]
 fn filename_from_url(url: &str) -> Option<String> {
     let parsed = Url::parse(url).ok()?;
@@ -33,6 +39,7 @@ fn filename_from_url(url: &str) -> Option<String> {
 
 /// Download a file from `url` to a local cache, if not already fetched, and
 /// return the path to the local file.
+#[cfg(not(target_arch = "wasm32"))]
 fn download_file(url: &str, filename: Option<&str>) -> Result<PathBuf, anyhow::Error> {
     let cache_dir = cache_dir()?;
     let filename = match filename {
@@ -53,6 +60,13 @@ fn download_file(url: &str, filename: Option<&str>) -> Result<PathBuf, anyhow::E
     fs::write(&file_path, &body)?;
 
     Ok(file_path)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn download_file(_url: &str, _filename: Option<&str>) -> Result<PathBuf, anyhow::Error> {
+    Err(anyhow!(
+        "Downloading models from a URL is not supported on the current platform"
+    ))
 }
 
 /// Location that a model can be loaded from.

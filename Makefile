@@ -41,5 +41,12 @@ wasm:
 	wasm-bindgen target/wasm32-unknown-unknown/release/ocrs.wasm --out-dir js/dist/ --target web --reference-types --weak-refs
 	tools/optimize-wasm.sh js/dist/ocrs_bg.wasm
 
+# Build Ocrs CLI for non-browser WebAssembly runtimes (eg. wasmtime). Run using:
+#
+#	wasmtime --dir . target/wasm32-wasi/release/ocrs.wasm --detect-model text-detection.rten --rec-model text-recognition.rten ocrs-cli/test-data/why-rust.png
+.PHONY: wasm-wasi
+wasm-wasi:
+	RUSTFLAGS="-C target-feature=+simd128" cargo build --release --target wasm32-wasi --package ocrs-cli
+
 .PHONY: wasm-all
 wasm-all: wasm wasm-nosimd
