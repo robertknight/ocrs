@@ -4,3 +4,8 @@ members = [
   "ocrs",
   "ocrs-cli",
 ]
+
+[workspace.dependencies]
+rten = { version = "0.10.0" }
+rten-imageproc = { version = "0.10.0" }
+rten-tensor = { version = "0.10.0" }
