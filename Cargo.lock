@@ -134,9 +134,9 @@ dependencies = [
 
 [[package]]
 name = "flatbuffers"
-version = "22.12.6"
+version = "24.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ae1bfc84d904f75e7ef6f8796b020c606a9e8e271e2004c0a74f7edeedba45f"
+checksum = "8add37afff2d4ffa83bc748a70b4b1370984f6980768554182424ef71447c35f"
 dependencies = [
  "bitflags",
  "rustc_version",
@@ -394,9 +394,9 @@ dependencies = [
 
 [[package]]
 name = "rten"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09c030cdf90e64c5eeeba389ca59da14b0a106b1b8366c15591251bb6a2e777f"
+checksum = "9ae4ca377f5ab9dabe9c0742b1bb0c2e1cf5bc17bb02e8f738c6130b1ff34e74"
 dependencies = [
  "flatbuffers",
  "libm",
@@ -412,33 +412,33 @@ dependencies = [
 
 [[package]]
 name = "rten-imageproc"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ba61077269b2b2c90445bfd55fb798dcd544b56e7fd78faaea51940b8e429ae"
+checksum = "b1974ad497f83f0a0e6f8cc1f948c1213bf701d02805797ccccc79181891371e"
 dependencies = [
  "rten-tensor",
 ]
 
 [[package]]
 name = "rten-simd"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8eb16da64e0d08ce56dc17d8304ab2da541176ee30430c0b0e581a7841a660ae"
+checksum = "7f1bb63fc8a157699e42a501cf43512871b20d3bea755f3ffac3ab63f1af10c4"
 
 [[package]]
 name = "rten-tensor"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52f5e53d2e43bb736e89e4ea41b707e024190f8ba47c3eddf5a3c2d022089909"
+checksum = "eb83a8292d28b4c79f17708d483dca3706538a86221f1a3373721877573f7f33"
 dependencies = [
  "smallvec",
 ]
 
 [[package]]
 name = "rten-vecmath"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56eccc46a7e7a2df2cebb7ba95e613a01942a01e0f2f2f7d6122176ab7372e9f"
+checksum = "af98a4e48d69c5aa2167d3adb7a8c1585602486a1aedd1ee8b3d684f98059396"
 dependencies = [
  "rten-simd",
 ]

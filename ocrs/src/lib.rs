@@ -205,7 +205,7 @@ impl OcrEngine {
 mod tests {
     use std::error::Error;
 
-    use rten::model_builder::{ModelBuilder, OpType};
+    use rten::model_builder::{ModelBuilder, ModelFormat, OpType};
     use rten::ops::{MaxPool, Transpose};
     use rten::Dimension;
     use rten::Model;
@@ -240,7 +240,7 @@ mod tests {
     /// Takes a CHW input tensor with values in `[-0.5, 0.5]` and adds a +0.5
     /// bias to produce an output "probability map".
     fn fake_detection_model() -> Model {
-        let mut mb = ModelBuilder::new();
+        let mut mb = ModelBuilder::new(ModelFormat::V1);
         let input_id = mb.add_value(
             "input",
             Some(&[
@@ -258,7 +258,7 @@ mod tests {
         mb.add_output(output_id);
 
         let bias = Tensor::from_scalar(0.5);
-        let bias_id = mb.add_float_constant(&bias);
+        let bias_id = mb.add_constant(bias.view());
         mb.add_operator(
             "add",
             OpType::Add,
@@ -277,7 +277,7 @@ mod tests {
     /// log-probability of each class label. In this fake we just re-interpret
     /// each column of the input as a one-hot vector of probabilities.
     fn fake_recognition_model() -> Model {
-        let mut mb = ModelBuilder::new();
+        let mut mb = ModelBuilder::new(ModelFormat::V1);
         let input_id = mb.add_value(
             "input",
             Some(&[
@@ -304,7 +304,7 @@ mod tests {
 
         // Squeeze to remove the channel dim: NCHW/4 => NHW/4
         let squeeze_axes = Tensor::from_vec(vec![1]);
-        let squeeze_axes_id = mb.add_int_constant(&squeeze_axes);
+        let squeeze_axes_id = mb.add_constant(squeeze_axes.view());
         let squeeze_out = mb.add_value("squeeze_out", None);
         mb.add_operator(
             "squeeze",

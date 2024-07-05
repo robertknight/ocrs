@@ -364,7 +364,11 @@ impl TextRecognizer {
         let input: Tensor<f32> = input.into();
         let [output] = self
             .model
-            .run_n(&[(self.input_id, (&input).into())], [self.output_id], None)
+            .run_n(
+                vec![(self.input_id, (&input).into())],
+                [self.output_id],
+                None,
+            )
             .map_err(|err| ModelRunError::RunFailed(err.into()))?;
         let mut rec_sequence: NdTensor<f32, 3> =
             output.try_into().map_err(|_| ModelRunError::WrongOutput)?;
