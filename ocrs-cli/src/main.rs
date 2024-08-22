@@ -283,6 +283,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
             DecodeMethod::Greedy
         },
+        ..Default::default()
     })?;
 
     // Read image into HWC tensor.
