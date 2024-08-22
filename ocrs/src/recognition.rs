@@ -256,6 +256,10 @@ fn text_lines_from_recognition_results(results: &[LineRecResult], alphabet: &str
         .map(|result| {
             let line_rect = result.line.region.bounding_rect();
             let x_scale_factor = (line_rect.width() as f32) / (result.line.resized_width as f32);
+            // Calculate how much the recognition model downscales the image
+            // width. We assume this will be an integer factor, or close to it
+            // if the input width is not an exact multiple of the downscaling
+            // factor.
             let downsample_factor =
                 (result.rec_input_len as f32 / result.ctc_input_len as f32).round() as u32;
 
@@ -264,16 +268,20 @@ fn text_lines_from_recognition_results(results: &[LineRecResult], alphabet: &str
                 .iter()
                 .enumerate()
                 .filter_map(|(i, step)| {
+                    // X coord range of character in line recognition input image.
                     let start_x = step.pos * downsample_factor;
                     let end_x = if let Some(next_step) = steps.get(i + 1) {
                         next_step.pos * downsample_factor
                     } else {
                         result.line.resized_width
                     };
-
+                    // Map X coords to those of the input image.
                     let [start_x, end_x] = [start_x, end_x]
                         .map(|x| line_rect.left() + (x as f32 * x_scale_factor) as i32);
-
+                    // Since the recognition input is padded, it is possible to
+                    // get predicted characters in the output with positions
+                    // that correspond to the padding region, and thus are
+                    // outside the bounds of the original line. Ignore these.
                     if start_x >= line_rect.right() {
                         return None;
                     }
