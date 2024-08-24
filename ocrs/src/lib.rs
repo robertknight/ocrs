@@ -241,7 +241,9 @@ mod tests {
     /// bias to produce an output "probability map".
     fn fake_detection_model() -> Model {
         let mut mb = ModelBuilder::new(ModelFormat::V1);
-        let input_id = mb.add_value(
+        let mut gb = mb.graph_builder();
+
+        let input_id = gb.add_value(
             "input",
             Some(&[
                 Dimension::Symbolic("batch".to_string()),
@@ -252,19 +254,22 @@ mod tests {
                 Dimension::Fixed(100),
             ]),
         );
-        mb.add_input(input_id);
+        gb.add_input(input_id);
 
-        let output_id = mb.add_value("output", None);
-        mb.add_output(output_id);
+        let output_id = gb.add_value("output", None);
+        gb.add_output(output_id);
 
         let bias = Tensor::from_scalar(0.5);
-        let bias_id = mb.add_constant(bias.view());
-        mb.add_operator(
+        let bias_id = gb.add_constant(bias.view());
+        gb.add_operator(
             "add",
             OpType::Add,
             &[Some(input_id), Some(bias_id)],
             &[output_id],
         );
+
+        let graph = gb.finish();
+        mb.set_graph(graph);
 
         let model_data = mb.finish();
         Model::load(model_data).unwrap()
@@ -278,7 +283,9 @@ mod tests {
     /// each column of the input as a one-hot vector of probabilities.
     fn fake_recognition_model() -> Model {
         let mut mb = ModelBuilder::new(ModelFormat::V1);
-        let input_id = mb.add_value(
+        let mut gb = mb.graph_builder();
+
+        let input_id = gb.add_value(
             "input",
             Some(&[
                 Dimension::Symbolic("batch".to_string()),
@@ -287,11 +294,11 @@ mod tests {
                 Dimension::Symbolic("seq".to_string()),
             ]),
         );
-        mb.add_input(input_id);
+        gb.add_input(input_id);
 
         // MaxPool to scale width by 1/4: NCHW => NCHW/4
-        let pool_out = mb.add_value("max_pool_out", None);
-        mb.add_operator(
+        let pool_out = gb.add_value("max_pool_out", None);
+        gb.add_operator(
             "max_pool",
             OpType::MaxPool(MaxPool {
                 kernel_size: [1, 4],
@@ -304,9 +311,9 @@ mod tests {
 
         // Squeeze to remove the channel dim: NCHW/4 => NHW/4
         let squeeze_axes = Tensor::from_vec(vec![1]);
-        let squeeze_axes_id = mb.add_constant(squeeze_axes.view());
-        let squeeze_out = mb.add_value("squeeze_out", None);
-        mb.add_operator(
+        let squeeze_axes_id = gb.add_constant(squeeze_axes.view());
+        let squeeze_out = gb.add_value("squeeze_out", None);
+        gb.add_operator(
             "squeeze",
             OpType::Squeeze,
             &[Some(pool_out), Some(squeeze_axes_id)],
@@ -314,8 +321,8 @@ mod tests {
         );
 
         // Transpose: NHW/4 => W/4NH
-        let transpose_out = mb.add_value("transpose_out", None);
-        mb.add_operator(
+        let transpose_out = gb.add_value("transpose_out", None);
+        gb.add_operator(
             "transpose",
             OpType::Transpose(Transpose {
                 perm: Some(vec![2, 0, 1]),
@@ -324,7 +331,10 @@ mod tests {
             &[transpose_out],
         );
 
-        mb.add_output(transpose_out);
+        gb.add_output(transpose_out);
+        let graph = gb.finish();
+
+        mb.set_graph(graph);
 
         let model_data = mb.finish();
         Model::load(model_data).unwrap()
