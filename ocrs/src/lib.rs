@@ -29,7 +29,7 @@ pub use preprocess::{DimOrder, ImagePixels, ImageSource, ImageSourceError};
 pub use recognition::DecodeMethod;
 pub use text_items::{TextChar, TextItem, TextLine, TextWord};
 
-
+// nb. The "E" before "ABCDE" should be the EUR symbol.
 const DEFAULT_ALPHABET: &str = " 0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~EABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
 
@@ -87,7 +87,7 @@ impl OcrEngine {
             recognizer,
             debug: params.debug,
             decode_method: params.decode_method,
-            alphabet: params.alphabet.unwrap_or_else(|| DEFAULT_ALPHABET.to_string()), // Use the default alphabet if none is provided
+            alphabet: params.alphabet.unwrap_or_else(|| DEFAULT_ALPHABET.to_string()),
         })
     }
 
@@ -165,8 +165,6 @@ impl OcrEngine {
             Err(anyhow!("Recognition model not loaded"))
         }
     }
-
-
 
     /// Prepare an image for input into the text line recognition model.
     ///

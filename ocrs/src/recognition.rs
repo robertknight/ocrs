@@ -227,7 +227,6 @@ pub struct RecognitionOpt {
     pub alphabet: String,
 }
 
-
 /// Input and output from recognition for a single text line.
 struct LineRecResult {
     /// Input to the recognition model.
@@ -275,9 +274,11 @@ fn text_lines_from_recognition_results(results: &[LineRecResult], alphabet: &str
                     } else {
                         result.line.resized_width
                     };
+
                     // Map X coords to those of the input image.
                     let [start_x, end_x] = [start_x, end_x]
                         .map(|x| line_rect.left() + (x as f32 * x_scale_factor) as i32);
+
                     // Since the recognition input is padded, it is possible to
                     // get predicted characters in the output with positions
                     // that correspond to the padding region, and thus are
@@ -286,7 +287,7 @@ fn text_lines_from_recognition_results(results: &[LineRecResult], alphabet: &str
                         return None;
                     }
 
-                    let char = alphabet  // Use the provided alphabet
+                    let char = alphabet
                         .chars()
                         .nth((step.label - 1) as usize)
                         .unwrap_or('?');
@@ -297,8 +298,7 @@ fn text_lines_from_recognition_results(results: &[LineRecResult], alphabet: &str
                             result.line.region.borrow(),
                             start_x,
                             end_x,
-                        )
-                            .expect("invalid X coords"),
+                        ).expect("invalid X coords"),
                     })
                 })
                 .collect();
@@ -311,7 +311,6 @@ fn text_lines_from_recognition_results(results: &[LineRecResult], alphabet: &str
         })
         .collect()
 }
-
 
 /// Extracts character sequences and coordinates from text lines detected in
 /// an image.
@@ -534,7 +533,7 @@ impl TextRecognizer {
         // batching and parallel processing. Re-sort them into input order.
         line_rec_results.sort_by_key(|result| result.line.index);
 
-        let text_lines = text_lines_from_recognition_results(&line_rec_results, &alphabet);  // Pass the alphabet
+        let text_lines = text_lines_from_recognition_results(&line_rec_results, &alphabet);
 
         Ok(text_lines)
     }
