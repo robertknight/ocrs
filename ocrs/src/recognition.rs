@@ -249,7 +249,10 @@ struct LineRecResult {
 /// for each line.
 ///
 /// Entries in the result may be `None` if no text was recognized for a line.
-fn text_lines_from_recognition_results(results: &[LineRecResult], alphabet: &str) -> Vec<Option<TextLine>> {
+fn text_lines_from_recognition_results(
+    results: &[LineRecResult],
+    alphabet: &str,
+) -> Vec<Option<TextLine>> {
     results
         .iter()
         .map(|result| {
@@ -298,7 +301,8 @@ fn text_lines_from_recognition_results(results: &[LineRecResult], alphabet: &str
                             result.line.region.borrow(),
                             start_x,
                             end_x,
-                        ).expect("invalid X coords"),
+                        )
+                        .expect("invalid X coords"),
                     })
                 })
                 .collect();

@@ -32,7 +32,6 @@ pub use text_items::{TextChar, TextItem, TextLine, TextWord};
 // nb. The "E" before "ABCDE" should be the EUR symbol.
 const DEFAULT_ALPHABET: &str = " 0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~EABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-
 /// Configuration for an [OcrEngine] instance.
 #[derive(Default)]
 pub struct OcrEngineParams {
@@ -87,7 +86,9 @@ impl OcrEngine {
             recognizer,
             debug: params.debug,
             decode_method: params.decode_method,
-            alphabet: params.alphabet.unwrap_or_else(|| DEFAULT_ALPHABET.to_string()),
+            alphabet: params
+                .alphabet
+                .unwrap_or_else(|| DEFAULT_ALPHABET.to_string()),
         })
     }
 
