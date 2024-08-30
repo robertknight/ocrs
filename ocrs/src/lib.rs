@@ -29,6 +29,9 @@ pub use preprocess::{DimOrder, ImagePixels, ImageSource, ImageSourceError};
 pub use recognition::DecodeMethod;
 pub use text_items::{TextChar, TextItem, TextLine, TextWord};
 
+// nb. The "E" before "ABCDE" should be the EUR symbol.
+const DEFAULT_ALPHABET: &str = " 0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~EABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
 /// Configuration for an [OcrEngine] instance.
 #[derive(Default)]
 pub struct OcrEngineParams {
@@ -43,6 +46,9 @@ pub struct OcrEngineParams {
 
     /// Method used to decode outputs of text recognition model.
     pub decode_method: DecodeMethod,
+
+    /// Alphabet used for text recognition.
+    pub alphabet: Option<String>,
 }
 
 /// Detects and recognizes text in images.
@@ -54,6 +60,7 @@ pub struct OcrEngine {
     recognizer: Option<TextRecognizer>,
     debug: bool,
     decode_method: DecodeMethod,
+    alphabet: String,
 }
 
 /// Input image for OCR analysis. Instances are created using
@@ -79,6 +86,9 @@ impl OcrEngine {
             recognizer,
             debug: params.debug,
             decode_method: params.decode_method,
+            alphabet: params
+                .alphabet
+                .unwrap_or_else(|| DEFAULT_ALPHABET.to_string()),
         })
     }
 
@@ -149,6 +159,7 @@ impl OcrEngine {
                 RecognitionOpt {
                     debug: self.debug,
                     decode_method: self.decode_method,
+                    alphabet: self.alphabet.clone(),
                 },
             )
         } else {

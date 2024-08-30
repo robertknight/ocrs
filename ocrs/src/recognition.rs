@@ -15,9 +15,6 @@ use crate::geom_util::{downwards_line, leftmost_edge, rightmost_edge};
 use crate::preprocess::BLACK_VALUE;
 use crate::text_items::{TextChar, TextLine};
 
-// nb. The "E" before "ABCDE" should be the EUR symbol.
-const DEFAULT_ALPHABET: &str = " 0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~EABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-
 /// Return the smallest multiple of `factor` that is >= `val`.
 fn round_up<
     T: Copy
@@ -226,6 +223,8 @@ pub struct RecognitionOpt {
 
     /// Method used to decode character sequence outputs to character values.
     pub decode_method: DecodeMethod,
+
+    pub alphabet: String,
 }
 
 /// Input and output from recognition for a single text line.
@@ -250,13 +249,15 @@ struct LineRecResult {
 /// for each line.
 ///
 /// Entries in the result may be `None` if no text was recognized for a line.
-fn text_lines_from_recognition_results(results: &[LineRecResult]) -> Vec<Option<TextLine>> {
+fn text_lines_from_recognition_results(
+    results: &[LineRecResult],
+    alphabet: &str,
+) -> Vec<Option<TextLine>> {
     results
         .iter()
         .map(|result| {
             let line_rect = result.line.region.bounding_rect();
             let x_scale_factor = (line_rect.width() as f32) / (result.line.resized_width as f32);
-
             // Calculate how much the recognition model downscales the image
             // width. We assume this will be an integer factor, or close to it
             // if the input width is not an exact multiple of the downscaling
@@ -289,7 +290,7 @@ fn text_lines_from_recognition_results(results: &[LineRecResult]) -> Vec<Option<
                         return None;
                     }
 
-                    let char = DEFAULT_ALPHABET
+                    let char = alphabet
                         .chars()
                         .nth((step.label - 1) as usize)
                         .unwrap_or('?');
@@ -430,6 +431,7 @@ impl TextRecognizer {
         let RecognitionOpt {
             debug,
             decode_method,
+            alphabet,
         } = opts;
 
         let [_, img_height, img_width] = image.shape();
@@ -535,7 +537,7 @@ impl TextRecognizer {
         // batching and parallel processing. Re-sort them into input order.
         line_rec_results.sort_by_key(|result| result.line.index);
 
-        let text_lines = text_lines_from_recognition_results(&line_rec_results);
+        let text_lines = text_lines_from_recognition_results(&line_rec_results, &alphabet);
 
         Ok(text_lines)
     }
