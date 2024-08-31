@@ -39,6 +39,9 @@ pub struct OcrEngineParams {
     pub detection_model: Option<Model>,
 
     /// Model used to recognize lines of text in the image.
+    ///
+    /// If using a custom model, you may need to adjust the
+    /// [`alphabet`](Self::alphabet) to match.
     pub recognition_model: Option<Model>,
 
     /// Enable debug logging.
@@ -48,6 +51,11 @@ pub struct OcrEngineParams {
     pub decode_method: DecodeMethod,
 
     /// Alphabet used for text recognition.
+    ///
+    /// This is useful if you are using a custom recognition model with a
+    /// modified alphabet. If not specified a default alphabet will be used
+    /// which matches the one used to train the [original
+    /// models](https://github.com/robertknight/ocrs-models).
     pub alphabet: Option<String>,
 }
 
