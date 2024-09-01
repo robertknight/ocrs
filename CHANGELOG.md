@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2024-08-01
+
+- Added ability to customize the alphabet used by the recognition model
+  (https://github.com/robertknight/ocrs/pull/100). Thanks @Phaired.
+
+- Updated rten to v0.13.1. This enables running custom models in the V2
+  [rten model format](https://github.com/robertknight/rten/blob/main/docs/rten-file-format.md)
+
 ## [0.8.0] - 2024-05-25
 
 ### Breaking changes
