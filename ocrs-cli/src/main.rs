@@ -245,7 +245,7 @@ Advanced options:
         text_map,
         text_mask,
         text_line_images,
-        alphabet
+        alphabet,
     })
 }
 
@@ -291,7 +291,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         detection_model: Some(detection_model),
         recognition_model: Some(recognition_model),
         debug: args.debug,
-        alphabet : args.alphabet,
+        alphabet: args.alphabet,
         decode_method: if args.beam_search {
             DecodeMethod::BeamSearch { width: 100 }
         } else {
