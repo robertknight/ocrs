@@ -104,6 +104,9 @@ struct Args {
 
     /// Extract each text line found and save as a PNG image.
     text_line_images: bool,
+
+    /// Recognize text using white listed character only
+    white_list: Option<String>,
 }
 
 fn parse_args() -> Result<Args, lexopt::Error> {
@@ -119,6 +122,7 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     let mut text_map = false;
     let mut text_mask = false;
     let mut text_line_images = false;
+    let mut white_list = None;
 
     let mut parser = lexopt::Parser::from_env();
     while let Some(arg) = parser.next()? {
@@ -153,6 +157,9 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             }
             Long("text-mask") => {
                 text_mask = true;
+            }
+            Long("white-list") => {
+                white_list = Some(parser.value()?.string()?);
             }
             Long("help") => {
                 println!(
@@ -209,6 +216,10 @@ Advanced options:
   --text-mask
 
     Generate a binary text mask for the input image
+
+  --white-list
+
+    Recognize text using white listed character only
 ",
                     bin_name = parser.bin_name().unwrap_or("ocrs")
                 );
@@ -233,6 +244,7 @@ Advanced options:
         text_map,
         text_mask,
         text_line_images,
+        white_list,
     })
 }
 
@@ -283,6 +295,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
             DecodeMethod::Greedy
         },
+        white_list: args.white_list,
         ..Default::default()
     })?;
 

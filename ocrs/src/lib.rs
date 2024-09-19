@@ -57,6 +57,12 @@ pub struct OcrEngineParams {
     /// which matches the one used to train the [original
     /// models](https://github.com/robertknight/ocrs-models).
     pub alphabet: Option<String>,
+
+    /// Recognize text using white listed character only.
+    /// This is useful when you need the text recognition model to
+    /// produce text using valid set of predefined characters.
+    /// for eg. Numbers only, small-case/capital case letters only.
+    pub white_list: Option<String>,
 }
 
 /// Detects and recognizes text in images.
@@ -69,6 +75,7 @@ pub struct OcrEngine {
     debug: bool,
     decode_method: DecodeMethod,
     alphabet: String,
+    white_list: Option<String>,
 }
 
 /// Input image for OCR analysis. Instances are created using
@@ -97,6 +104,7 @@ impl OcrEngine {
             alphabet: params
                 .alphabet
                 .unwrap_or_else(|| DEFAULT_ALPHABET.to_string()),
+            white_list: params.white_list,
         })
     }
 
@@ -168,6 +176,7 @@ impl OcrEngine {
                     debug: self.debug,
                     decode_method: self.decode_method,
                     alphabet: self.alphabet.clone(),
+                    white_list: self.white_list.clone(),
                 },
             )
         } else {

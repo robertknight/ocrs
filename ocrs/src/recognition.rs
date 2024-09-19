@@ -1,3 +1,4 @@
+use core::f32;
 use std::collections::HashMap;
 
 use anyhow::anyhow;
@@ -225,6 +226,8 @@ pub struct RecognitionOpt {
     pub decode_method: DecodeMethod,
 
     pub alphabet: String,
+
+    pub white_list: Option<String>,
 }
 
 /// Input and output from recognition for a single text line.
@@ -292,6 +295,10 @@ fn text_lines_from_recognition_results(
 
                     let char = alphabet
                         .chars()
+                        // [See orcs-models github repo, ocrs_models/dataset/utils.py(encode)]
+                        // Index `0` is reserved for blank character and `i + 1` is used as
+                        // training label for character at index `i` of `alphabet` string.
+                        // Here we're subtracting 1 to get the actual index from the output label
                         .nth((step.label - 1) as usize)
                         .unwrap_or('?');
 
@@ -432,7 +439,24 @@ impl TextRecognizer {
             debug,
             decode_method,
             alphabet,
+            white_list,
         } = opts;
+        let excluded_char_labels = white_list.map(|white_list| {
+            alphabet
+                .chars()
+                .enumerate()
+                .filter_map(|(index, char)| {
+                    if !white_list.contains(char) {
+                        // [See orcs-models github repo, ocrs_models/dataset/utils.py(encode)]
+                        // Index `0` is reserved for blank character and `i + 1` is used as
+                        // training label for character at index `i` of `alphabet` string.
+                        Some(index + 1)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+        });
 
         let [_, img_height, img_width] = image.shape();
         let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
@@ -500,7 +524,8 @@ impl TextRecognizer {
                             group_width as usize,
                         );
 
-                        let rec_output = self.run(rec_input)?;
+                        // Here mutation is added to allow whitelisting of characters
+                        let mut rec_output = self.run(rec_input)?;
                         let ctc_input_len = rec_output.shape()[1];
 
                         // Apply CTC decoding to get the label sequence for each line.
@@ -509,7 +534,18 @@ impl TextRecognizer {
                             .enumerate()
                             .map(|(group_line_index, line)| {
                                 let decoder = CtcDecoder::new();
-                                let input_seq = rec_output.slice([group_line_index]);
+                                // Here mutation is added to allow whitelisting of characters
+                                let mut input_seq = rec_output.slice_mut([group_line_index]);
+                                //whitelisting code
+                                if let Some(ref excluded_char_labels) = excluded_char_labels {
+                                    for row in 0..input_seq.shape()[0] {
+                                        for &column in excluded_char_labels.iter() {
+                                            input_seq[[row, column]] = f32::NEG_INFINITY;
+                                        }
+                                    }
+                                }
+                                let input_seq = input_seq.view();
+                                //
                                 let ctc_output = match decode_method {
                                     DecodeMethod::Greedy => decoder.decode_greedy(input_seq),
                                     DecodeMethod::BeamSearch { width } => {
