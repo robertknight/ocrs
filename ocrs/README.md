@@ -24,3 +24,6 @@ cd examples/
 # Run OCR on an image and print the extracted text.
 cargo run --release --example hello_ocr rust-book.jpg
 ```
+
+> Note that, performance of the binary will differ significantly if `debug`
+> build profile is used. Learn more: https://github.com/robertknight/ocrs/issues/117#issuecomment-2362314977
