@@ -235,6 +235,7 @@ Advanced options:
     }
 
     Ok(Args {
+        alphabet,
         beam_search,
         debug,
         detection_model,
@@ -245,7 +246,6 @@ Advanced options:
         text_map,
         text_mask,
         text_line_images,
-        alphabet,
     })
 }
 
