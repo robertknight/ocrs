@@ -192,7 +192,7 @@ Options:
 
   -a, --alphabet \"alphabet\"
 
-    Use a custom alphabet for recognition
+    Specify the alphabet used by the recognition model
 
   --version
 
