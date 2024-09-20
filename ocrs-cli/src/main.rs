@@ -105,7 +105,7 @@ struct Args {
     /// Extract each text line found and save as a PNG image.
     text_line_images: bool,
 
-    /// Custom alphabet for recognition.
+    /// Alphabet used by the recognition model.
     /// If not provided, the default alphabet is used.
     alphabet: Option<String>,
 }
