@@ -107,6 +107,10 @@ struct Args {
 
     /// Recognize text using white listed character only
     white_list: Option<String>,
+
+    /// Alphabet used by the recognition model.
+    /// If not provided, the default alphabet is used.
+    alphabet: Option<String>,
 }
 
 fn parse_args() -> Result<Args, lexopt::Error> {
@@ -123,6 +127,7 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     let mut text_mask = false;
     let mut text_line_images = false;
     let mut white_list = None;
+    let mut alphabet = None;
 
     let mut parser = lexopt::Parser::from_env();
     while let Some(arg) = parser.next()? {
@@ -145,6 +150,9 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             }
             Short('p') | Long("png") => {
                 output_format = OutputFormat::Png;
+            }
+            Short('a') | Long("alphabet") => {
+                alphabet = Some(parser.value()?.string()?);
             }
             Long("rec-model") => {
                 recognition_model = Some(parser.value()?.string()?);
@@ -188,6 +196,10 @@ Options:
   --rec-model <path>
 
     Use a custom text recognition model
+
+  -a, --alphabet \"alphabet\"
+
+    Specify the alphabet used by the recognition model
 
   --version
 
@@ -234,6 +246,7 @@ Advanced options:
     }
 
     Ok(Args {
+        alphabet,
         beam_search,
         debug,
         detection_model,
@@ -290,6 +303,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         detection_model: Some(detection_model),
         recognition_model: Some(recognition_model),
         debug: args.debug,
+        alphabet: args.alphabet,
         decode_method: if args.beam_search {
             DecodeMethod::BeamSearch { width: 100 }
         } else {
