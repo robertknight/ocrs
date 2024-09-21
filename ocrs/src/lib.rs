@@ -75,7 +75,8 @@ pub struct OcrEngine {
     debug: bool,
     decode_method: DecodeMethod,
     alphabet: String,
-    white_list: Option<String>,
+    // This value is generated from `white_list` member of `OCREngineParams`
+    excluded_char_labels: Option<Vec<usize>>,
 }
 
 /// Input image for OCR analysis. Instances are created using
@@ -96,15 +97,35 @@ impl OcrEngine {
             .recognition_model
             .map(TextRecognizer::from_model)
             .transpose()?;
+
+        let alphabet = params
+            .alphabet
+            .unwrap_or_else(|| DEFAULT_ALPHABET.to_string());
+
+        let excluded_char_labels = params.white_list.map(|white_list| {
+            alphabet
+                .chars()
+                .enumerate()
+                .filter_map(|(index, char)| {
+                    if !white_list.contains(char) {
+                        // [See orcs-models github repo, ocrs_models/dataset/utils.py(encode)]
+                        // Index `0` is reserved for blank character and `i + 1` is used as
+                        // training label for character at index `i` of `alphabet` string.
+                        Some(index + 1)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+        });
+
         Ok(OcrEngine {
             detector,
             recognizer,
+            alphabet,
+            excluded_char_labels,
             debug: params.debug,
             decode_method: params.decode_method,
-            alphabet: params
-                .alphabet
-                .unwrap_or_else(|| DEFAULT_ALPHABET.to_string()),
-            white_list: params.white_list,
         })
     }
 
@@ -175,8 +196,8 @@ impl OcrEngine {
                 RecognitionOpt {
                     debug: self.debug,
                     decode_method: self.decode_method,
-                    alphabet: self.alphabet.clone(),
-                    white_list: self.white_list.clone(),
+                    alphabet: &self.alphabet,
+                    excluded_char_labels: self.excluded_char_labels.as_deref(),
                 },
             )
         } else {

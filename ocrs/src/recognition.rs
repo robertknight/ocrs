@@ -219,15 +219,15 @@ pub enum DecodeMethod {
 }
 
 #[derive(Clone, Default)]
-pub struct RecognitionOpt {
+pub struct RecognitionOpt<'a> {
     pub debug: bool,
 
     /// Method used to decode character sequence outputs to character values.
     pub decode_method: DecodeMethod,
 
-    pub alphabet: String,
+    pub alphabet: &'a str,
 
-    pub white_list: Option<String>,
+    pub excluded_char_labels: Option<&'a [usize]>,
 }
 
 /// Input and output from recognition for a single text line.
@@ -439,24 +439,8 @@ impl TextRecognizer {
             debug,
             decode_method,
             alphabet,
-            white_list,
+            excluded_char_labels,
         } = opts;
-        let excluded_char_labels = white_list.map(|white_list| {
-            alphabet
-                .chars()
-                .enumerate()
-                .filter_map(|(index, char)| {
-                    if !white_list.contains(char) {
-                        // [See orcs-models github repo, ocrs_models/dataset/utils.py(encode)]
-                        // Index `0` is reserved for blank character and `i + 1` is used as
-                        // training label for character at index `i` of `alphabet` string.
-                        Some(index + 1)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>()
-        });
 
         let [_, img_height, img_width] = image.shape();
         let page_rect = Rect::from_hw(img_height as i32, img_width as i32);
