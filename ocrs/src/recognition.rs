@@ -559,7 +559,7 @@ impl TextRecognizer {
         // batching and parallel processing. Re-sort them into input order.
         line_rec_results.sort_by_key(|result| result.line.index);
 
-        let text_lines = text_lines_from_recognition_results(&line_rec_results, &alphabet);
+        let text_lines = text_lines_from_recognition_results(&line_rec_results, alphabet);
 
         Ok(text_lines)
     }
