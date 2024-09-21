@@ -524,6 +524,8 @@ impl TextRecognizer {
                                 if let Some(ref excluded_char_labels) = excluded_char_labels {
                                     for row in 0..input_seq.shape()[0] {
                                         for &column in excluded_char_labels.iter() {
+                                            // Setting the output value of excluded char to -Inf causes the
+                                            // `decode_method` to favour chars other than the excluded char.
                                             input_seq[[row, column]] = f32::NEG_INFINITY;
                                         }
                                     }
