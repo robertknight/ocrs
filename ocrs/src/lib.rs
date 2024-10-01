@@ -58,11 +58,11 @@ pub struct OcrEngineParams {
     /// models](https://github.com/robertknight/ocrs-models).
     pub alphabet: Option<String>,
 
-    /// Recognize text using white listed character only.
+    /// Recognize text using allowed characters only.
     /// This is useful when you need the text recognition model to
     /// produce text using valid set of predefined characters.
     /// for eg. Numbers only, small-case/capital case letters only.
-    pub white_list: Option<String>,
+    pub allowed_chars: Option<String>,
 }
 
 /// Detects and recognizes text in images.
@@ -75,7 +75,7 @@ pub struct OcrEngine {
     debug: bool,
     decode_method: DecodeMethod,
     alphabet: String,
-    // This value is generated from `white_list` member of `OCREngineParams`
+    // This value is generated from `allowed-characters` member of `OCREngineParams`
     excluded_char_labels: Option<Vec<usize>>,
 }
 
@@ -102,12 +102,12 @@ impl OcrEngine {
             .alphabet
             .unwrap_or_else(|| DEFAULT_ALPHABET.to_string());
 
-        let excluded_char_labels = params.white_list.map(|white_list| {
+        let excluded_char_labels = params.allowed_chars.map(|allowed_characters| {
             alphabet
                 .chars()
                 .enumerate()
                 .filter_map(|(index, char)| {
-                    if !white_list.contains(char) {
+                    if !allowed_characters.contains(char) {
                         // [See orcs-models github repo, ocrs_models/dataset/utils.py(encode)]
                         // Index `0` is reserved for blank character and `i + 1` is used as
                         // training label for character at index `i` of `alphabet` string.

@@ -105,8 +105,9 @@ struct Args {
     /// Extract each text line found and save as a PNG image.
     text_line_images: bool,
 
-    /// Recognize text using white listed character only
-    white_list: Option<String>,
+    /// Filter characters produced by text recognition
+    /// This must be a sub-set of `alphabet`.
+    allowed_chars: Option<String>,
 
     /// Alphabet used by the recognition model.
     /// If not provided, the default alphabet is used.
@@ -126,7 +127,7 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     let mut text_map = false;
     let mut text_mask = false;
     let mut text_line_images = false;
-    let mut white_list = None;
+    let mut allowed_chars = None;
     let mut alphabet = None;
 
     let mut parser = lexopt::Parser::from_env();
@@ -166,8 +167,8 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             Long("text-mask") => {
                 text_mask = true;
             }
-            Long("white-list") => {
-                white_list = Some(parser.value()?.string()?);
+            Long("allowed-chars") => {
+                allowed_chars = Some(parser.value()?.string()?);
             }
             Long("help") => {
                 println!(
@@ -201,6 +202,10 @@ Options:
 
     Specify the alphabet used by the recognition model
 
+  --allowed-chars \"allowed-chars\"
+
+    Filter characters produced by text recognition
+
   --version
 
     Display version info
@@ -228,10 +233,6 @@ Advanced options:
   --text-mask
 
     Generate a binary text mask for the input image
-
-  --white-list
-
-    Recognize text using white listed character only
 ",
                     bin_name = parser.bin_name().unwrap_or("ocrs")
                 );
@@ -257,7 +258,7 @@ Advanced options:
         text_map,
         text_mask,
         text_line_images,
-        white_list,
+        allowed_chars,
     })
 }
 
@@ -309,7 +310,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
             DecodeMethod::Greedy
         },
-        white_list: args.white_list,
+        allowed_chars: args.allowed_chars,
         ..Default::default()
     })?;
 

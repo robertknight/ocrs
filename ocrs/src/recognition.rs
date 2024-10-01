@@ -508,7 +508,6 @@ impl TextRecognizer {
                             group_width as usize,
                         );
 
-                        // Here mutation is added to allow whitelisting of characters
                         let mut rec_output = self.run(rec_input)?;
                         let ctc_input_len = rec_output.shape()[1];
 
@@ -518,7 +517,7 @@ impl TextRecognizer {
                             .enumerate()
                             .map(|(group_line_index, line)| {
                                 let decoder = CtcDecoder::new();
-                                // Here mutation is added to allow whitelisting of characters
+
                                 let mut input_seq_slice = rec_output.slice_mut([group_line_index]);
                                 let input_seq = Self::filter_excluded_char_labels(
                                     excluded_char_labels,
@@ -562,7 +561,7 @@ impl TextRecognizer {
         input_seq_slice: &'a mut NdTensorViewMut<'_, f32, 2>,
     ) -> NdTensorView<'a, f32, 2> {
         if let Some(excluded_char_labels) = excluded_char_labels {
-            for row in 0..input_seq_slice.shape()[0] {
+            for row in 0..input_seq_slice.size(0) {
                 for &excluded_char_label in excluded_char_labels.iter() {
                     // Setting the output value of excluded char to -Inf causes the
                     // `decode_method` to favour chars other than the excluded char.
