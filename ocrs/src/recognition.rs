@@ -15,20 +15,6 @@ use crate::geom_util::{downwards_line, leftmost_edge, rightmost_edge};
 use crate::preprocess::BLACK_VALUE;
 use crate::text_items::{TextChar, TextLine};
 
-/// Return the smallest multiple of `factor` that is >= `val`.
-fn round_up<
-    T: Copy
-        + std::ops::Add<T, Output = T>
-        + std::ops::Sub<T, Output = T>
-        + std::ops::Rem<T, Output = T>,
->(
-    val: T,
-    factor: T,
-) -> T {
-    let rem = val % factor;
-    (val + factor) - rem
-}
-
 /// Return a polygon which contains all the rects in `words`.
 ///
 /// `words` is assumed to be a series of disjoint rectangles ordered from left
@@ -454,7 +440,7 @@ impl TextRecognizer {
                 .integral_bounding_rect();
             let resized_width =
                 resized_line_width(line_rect.width(), line_rect.height(), rec_img_height as i32);
-            let group_width = round_up(resized_width, 50);
+            let group_width = resized_width.next_multiple_of(50);
             line_groups
                 .entry(group_width as i32)
                 .or_default()
