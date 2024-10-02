@@ -35,6 +35,10 @@ test:
 test-e2e:
 	python tools/test-e2e.py ocrs-cli/test-data/
 
+.PHONY: update-e2e
+update-e2e:
+	python tools/test-e2e.py --update ocrs-cli/test-data/
+
 .PHONY: wasm
 wasm:
 	RUSTFLAGS="-C target-feature=+simd128" cargo build --release --target wasm32-unknown-unknown --package ocrs

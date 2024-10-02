@@ -29,12 +29,16 @@ def extract_text(image_path: str) -> str:
 IMAGE_PAT = "\\.(jpeg|jpg|png|webp)$"
 
 
-def run_tests(test_case_dir: str, *, verbose=False) -> bool:
+def run_tests(test_case_dir: str, *, verbose=False, update_baselines=False) -> bool:
     """
     Compare extracted text for image files against expectations.
 
     Each image file in `test_case_dir` is expected to have an accompanying
     "{image_name}.expected.txt" file.
+
+    If `update_baselines` is true, mismatches between the actual and expected
+    results will result in the expected results being updated. When this flag
+    is set, the tests will still succeed if there is a mismatch.
 
     Returns True if all test cases passed.
     """
@@ -61,15 +65,20 @@ def run_tests(test_case_dir: str, *, verbose=False) -> bool:
         text = text.strip()
 
         if text != expected_text:
-            errors += 1
+            if update_baselines:
+                with open(expected_path, 'w') as fp:
+                    fp.write(text)
+                print(f"Updated baseline for {fname}")
+            else:
+                errors += 1
 
-            print(f"Actual vs expected mismatch for {fname}")
+                print(f"Actual vs expected mismatch for {fname}")
 
-            if verbose:
-                print("Actual:")
-                print(textwrap.indent(text, "  "))
-                print("Expected:")
-                print(textwrap.indent(expected_text, "  "))
+                if verbose:
+                    print("Actual:")
+                    print(textwrap.indent(text, "  "))
+                    print("Expected:")
+                    print(textwrap.indent(expected_text, "  "))
 
     if errors != 0:
         print(f"{errors} tests failed")
@@ -89,11 +98,14 @@ parser.add_argument("dir", help="Directory containing test images and expected o
 parser.add_argument(
     "-v", "--verbose", action=BooleanOptionalAction, help="Enable verbose logging"
 )
+parser.add_argument(
+    "-u", "--update", action=BooleanOptionalAction, help="Update baselines"
+)
 args = parser.parse_args()
 
 print("Building ocrs...")
 build_ocrs()
-passed = run_tests(args.dir, verbose=args.verbose)
+passed = run_tests(args.dir, verbose=args.verbose, update_baselines=args.update)
 
 if not passed:
     sys.exit(1)
