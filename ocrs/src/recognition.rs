@@ -365,8 +365,14 @@ impl TextRecognizer {
                 None,
             )
             .map_err(|err| ModelRunError::RunFailed(err.into()))?;
-        let mut rec_sequence: NdTensor<f32, 3> =
-            output.try_into().map_err(|_| ModelRunError::WrongOutput)?;
+
+        let output_ndim = output.ndim();
+        let mut rec_sequence: NdTensor<f32, 3> = output.try_into().map_err(|_| {
+            ModelRunError::WrongOutput(format!(
+                "expected recognition output to have 3 dims but it has {}",
+                output_ndim
+            ))
+        })?;
 
         // Transpose from [seq, batch, class] => [batch, seq, class]
         rec_sequence.permute([1, 0, 2]);
@@ -473,6 +479,8 @@ impl TextRecognizer {
             })
             .collect();
 
+        let alphabet_len = alphabet.chars().count();
+
         // Run text recognition on batches of lines.
         let batch_rec_results: Result<Vec<Vec<LineRecResult>>, ModelRunError> =
             thread_pool().run(|| {
@@ -496,6 +504,15 @@ impl TextRecognizer {
                         );
 
                         let mut rec_output = self.run(rec_input)?;
+
+                        if alphabet_len + 1 != rec_output.size(2) {
+                            return Err(ModelRunError::WrongOutput(format!(
+                                "output column count ({}) does not match alphabet size ({})",
+                                rec_output.size(2),
+                                alphabet_len + 1
+                            )));
+                        }
+
                         let ctc_input_len = rec_output.shape()[1];
 
                         // Apply CTC decoding to get the label sequence for each line.
