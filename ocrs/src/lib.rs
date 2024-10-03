@@ -268,7 +268,7 @@ mod tests {
     use rten::Model;
     use rten_imageproc::{fill_rect, BoundingRect, Rect, RectF, RotatedRect};
     use rten_tensor::prelude::*;
-    use rten_tensor::{NdTensor, Tensor};
+    use rten_tensor::{NdTensor, NdTensorView, Tensor};
 
     use super::{DimOrder, ImageSource, OcrEngine, OcrEngineParams};
 
@@ -458,32 +458,23 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_ocr_engine_recognize_lines() -> Result<(), Box<dyn Error>> {
-        let mut image = NdTensor::zeros([1, 64, 32]);
-
-        // Fill a single row of the input image.
-        //
-        // The dummy recognition model treats each column of the input as a
-        // one-hot vector of character class probabilities. Pre-processing of
-        // the input will shift values from [0, 1] to [-0.5, 0.5]. CTC decoding
-        // of the output will ignore class 0 (as it represents a CTC blank)
-        // and repeated characters.
-        //
-        // Filling a single input row with "1"s will produce a single char
-        // output where the char's index in the alphabet is the row index - 1.
-        // ie. Filling the first row produces " ", the second row "0" and so on,
-        // using the default alphabet.
-        image
-            .slice_mut::<2, _>((.., 2, ..))
-            .iter_mut()
-            .for_each(|x| *x = 1.);
-
-        let engine = OcrEngine::new(OcrEngineParams {
-            detection_model: None,
-            recognition_model: Some(fake_recognition_model()),
-            ..Default::default()
-        })?;
+    // Test recognition using a dummy recognition model.
+    //
+    // The dummy model treats each column of the input image as a one-hot vector
+    // of character class probabilities. Pre-processing of the input will shift
+    // values from [0, 1] to [-0.5, 0.5]. CTC decoding of the output will ignore
+    // class 0 (as it represents a CTC blank) and repeated characters.
+    //
+    // Filling a single input row with "1"s will produce a single char output
+    // where the char's index in the alphabet is the row index - 1.  ie. Filling
+    // the first row produces " ", the second row "0" and so on, using the
+    // default alphabet.
+    fn test_recognition(
+        params: OcrEngineParams,
+        image: NdTensorView<f32, 3>,
+        expected_text: &str,
+    ) -> Result<(), Box<dyn Error>> {
+        let engine = OcrEngine::new(params)?;
         let input = engine.prepare_input(ImageSource::from_tensor(image.view(), DimOrder::Chw)?)?;
 
         // Create a dummy input line with a single word which fills the image.
@@ -499,7 +490,28 @@ mod tests {
 
         assert!(lines.get(0).is_some());
         let line = lines[0].as_ref().unwrap();
-        assert_eq!(line.to_string(), "0");
+        assert_eq!(line.to_string(), expected_text);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_ocr_engine_recognize_lines() -> Result<(), Box<dyn Error>> {
+        let mut image = NdTensor::zeros([1, 64, 32]);
+
+        // Set the probability of character 1 in the alphabet ('0') to 1 and
+        // leave all other characters with a probability of zero.
+        image.slice_mut::<2, _>((.., 2, ..)).fill(1.);
+
+        test_recognition(
+            OcrEngineParams {
+                detection_model: None,
+                recognition_model: Some(fake_recognition_model()),
+                ..Default::default()
+            },
+            image.view(),
+            "0",
+        )?;
 
         Ok(())
     }
