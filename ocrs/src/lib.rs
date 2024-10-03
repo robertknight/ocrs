@@ -57,6 +57,16 @@ pub struct OcrEngineParams {
     /// which matches the one used to train the [original
     /// models](https://github.com/robertknight/ocrs-models).
     pub alphabet: Option<String>,
+
+    /// Set of characters that may be produced by text recognition.
+    ///
+    /// This is useful when you need the text recognition model to
+    /// produce text that only includes a predefined set of characters, for
+    /// example only numbers or lower-case letters.
+    ///
+    /// If this option is not set, text recognition may produce any character
+    /// from the recognition model's alphabet.
+    pub allowed_chars: Option<String>,
 }
 
 /// Detects and recognizes text in images.
@@ -69,6 +79,10 @@ pub struct OcrEngine {
     debug: bool,
     decode_method: DecodeMethod,
     alphabet: String,
+
+    /// Indices of characters in `alphabet` that are excluded from recognition
+    /// output. See [`OcrEngineParams::allowed_chars`].
+    excluded_char_labels: Option<Vec<usize>>,
 }
 
 /// Input image for OCR analysis. Instances are created using
@@ -89,14 +103,37 @@ impl OcrEngine {
             .recognition_model
             .map(TextRecognizer::from_model)
             .transpose()?;
+
+        let alphabet = params
+            .alphabet
+            .unwrap_or_else(|| DEFAULT_ALPHABET.to_string());
+
+        let excluded_char_labels = params.allowed_chars.map(|allowed_characters| {
+            alphabet
+                .chars()
+                .enumerate()
+                .filter_map(|(index, char)| {
+                    if !allowed_characters.contains(char) {
+                        // Index `0` is reserved for the CTC blank character and
+                        // `i + 1` is used as training label for character at
+                        // index `i` of `alphabet` string.
+                        //
+                        // See https://github.com/robertknight/ocrs-models/blob/3d98fc655d6fd4acddc06e7f5d60a55b55748a48/ocrs_models/datasets/util.py#L113
+                        Some(index + 1)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+        });
+
         Ok(OcrEngine {
             detector,
             recognizer,
+            alphabet,
+            excluded_char_labels,
             debug: params.debug,
             decode_method: params.decode_method,
-            alphabet: params
-                .alphabet
-                .unwrap_or_else(|| DEFAULT_ALPHABET.to_string()),
         })
     }
 
@@ -167,7 +204,8 @@ impl OcrEngine {
                 RecognitionOpt {
                     debug: self.debug,
                     decode_method: self.decode_method,
-                    alphabet: self.alphabet.clone(),
+                    alphabet: &self.alphabet,
+                    excluded_char_labels: self.excluded_char_labels.as_deref(),
                 },
             )
         } else {

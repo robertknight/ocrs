@@ -105,6 +105,10 @@ struct Args {
     /// Extract each text line found and save as a PNG image.
     text_line_images: bool,
 
+    /// Filter characters produced by text recognition
+    /// This must be a sub-set of `alphabet`.
+    allowed_chars: Option<String>,
+
     /// Alphabet used by the recognition model.
     /// If not provided, the default alphabet is used.
     alphabet: Option<String>,
@@ -114,21 +118,28 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     use lexopt::prelude::*;
 
     let mut values = VecDeque::new();
+    let mut allowed_chars = None;
+    let mut alphabet = None;
     let mut beam_search = false;
     let mut debug = false;
     let mut detection_model = None;
     let mut output_format = OutputFormat::Text;
     let mut output_path = None;
     let mut recognition_model = None;
+    let mut text_line_images = false;
     let mut text_map = false;
     let mut text_mask = false;
-    let mut text_line_images = false;
-    let mut alphabet = None;
 
     let mut parser = lexopt::Parser::from_env();
     while let Some(arg) = parser.next()? {
         match arg {
             Value(val) => values.push_back(val.string()?),
+            Long("allowed-chars") => {
+                allowed_chars = Some(parser.value()?.string()?);
+            }
+            Short('a') | Long("alphabet") => {
+                alphabet = Some(parser.value()?.string()?);
+            }
             Long("beam") => {
                 beam_search = true;
             }
@@ -146,9 +157,6 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             }
             Short('p') | Long("png") => {
                 output_format = OutputFormat::Png;
-            }
-            Short('a') | Long("alphabet") => {
-                alphabet = Some(parser.value()?.string()?);
             }
             Long("rec-model") => {
                 recognition_model = Some(parser.value()?.string()?);
@@ -170,6 +178,14 @@ Usage: {bin_name} [OPTIONS] <image>
 
 Options:
 
+  --allowed-chars <chars>
+
+    Filter characters produced by text recognition
+
+  -a, --alphabet <chars>
+
+    Specify the alphabet used by the recognition model
+
   --detect-model <path>
 
     Use a custom text detection model
@@ -189,10 +205,6 @@ Options:
   --rec-model <path>
 
     Use a custom text recognition model
-
-  -a, --alphabet \"alphabet\"
-
-    Specify the alphabet used by the recognition model
 
   --version
 
@@ -246,6 +258,7 @@ Advanced options:
         text_map,
         text_mask,
         text_line_images,
+        allowed_chars,
     })
 }
 
@@ -287,6 +300,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     })?;
 
     // Initialize OCR engine.
+    #[allow(clippy::needless_update)]
     let engine = OcrEngine::new(OcrEngineParams {
         detection_model: Some(detection_model),
         recognition_model: Some(recognition_model),
@@ -297,6 +311,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         } else {
             DecodeMethod::Greedy
         },
+        allowed_chars: args.allowed_chars,
         ..Default::default()
     })?;
 

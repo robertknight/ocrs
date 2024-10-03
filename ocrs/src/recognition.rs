@@ -1,3 +1,4 @@
+use core::f32;
 use std::collections::HashMap;
 
 use anyhow::anyhow;
@@ -8,7 +9,7 @@ use rten_imageproc::{
     bounding_rect, BoundingRect, Line, Point, PointF, Polygon, Rect, RotatedRect,
 };
 use rten_tensor::prelude::*;
-use rten_tensor::{NdTensor, NdTensorView, Tensor};
+use rten_tensor::{NdTensor, NdTensorView, NdTensorViewMut, Tensor};
 
 use crate::errors::ModelRunError;
 use crate::geom_util::{downwards_line, leftmost_edge, rightmost_edge};
@@ -204,13 +205,15 @@ pub enum DecodeMethod {
 }
 
 #[derive(Clone, Default)]
-pub struct RecognitionOpt {
+pub struct RecognitionOpt<'a> {
     pub debug: bool,
 
     /// Method used to decode character sequence outputs to character values.
     pub decode_method: DecodeMethod,
 
-    pub alphabet: String,
+    pub alphabet: &'a str,
+
+    pub excluded_char_labels: Option<&'a [usize]>,
 }
 
 /// Input and output from recognition for a single text line.
@@ -278,6 +281,11 @@ fn text_lines_from_recognition_results(
 
                     let char = alphabet
                         .chars()
+                        // Index `0` is reserved for blank character and `i + 1` is used as training
+                        // label for character at index `i` of `alphabet` string.  Here we're
+                        // subtracting 1 to get the actual index from the output label
+                        //
+                        // See https://github.com/robertknight/ocrs-models/blob/3d98fc655d6fd4acddc06e7f5d60a55b55748a48/ocrs_models/datasets/util.py#L113
                         .nth((step.label - 1) as usize)
                         .unwrap_or('?');
 
@@ -418,6 +426,7 @@ impl TextRecognizer {
             debug,
             decode_method,
             alphabet,
+            excluded_char_labels,
         } = opts;
 
         let [_, img_height, img_width] = image.shape();
@@ -486,7 +495,7 @@ impl TextRecognizer {
                             group_width as usize,
                         );
 
-                        let rec_output = self.run(rec_input)?;
+                        let mut rec_output = self.run(rec_input)?;
                         let ctc_input_len = rec_output.shape()[1];
 
                         // Apply CTC decoding to get the label sequence for each line.
@@ -495,7 +504,13 @@ impl TextRecognizer {
                             .enumerate()
                             .map(|(group_line_index, line)| {
                                 let decoder = CtcDecoder::new();
-                                let input_seq = rec_output.slice([group_line_index]);
+
+                                let mut input_seq_slice = rec_output.slice_mut([group_line_index]);
+                                let input_seq = Self::filter_excluded_char_labels(
+                                    excluded_char_labels,
+                                    &mut input_seq_slice,
+                                );
+
                                 let ctc_output = match decode_method {
                                     DecodeMethod::Greedy => decoder.decode_greedy(input_seq),
                                     DecodeMethod::BeamSearch { width } => {
@@ -523,9 +538,30 @@ impl TextRecognizer {
         // batching and parallel processing. Re-sort them into input order.
         line_rec_results.sort_by_key(|result| result.line.index);
 
-        let text_lines = text_lines_from_recognition_results(&line_rec_results, &alphabet);
+        let text_lines = text_lines_from_recognition_results(&line_rec_results, alphabet);
 
         Ok(text_lines)
+    }
+
+    /// Post-process recognition model outputs to filter excluded characters.
+    ///
+    /// `input_seq_slice` is a (seq, char_prob) matrix of log probabilities for
+    /// characters. `excluded_char_labels` specifies indices of characters that
+    /// should be excluded, by setting the log probability to -Inf.
+    fn filter_excluded_char_labels<'a>(
+        excluded_char_labels: Option<&[usize]>,
+        input_seq_slice: &'a mut NdTensorViewMut<'_, f32, 2>,
+    ) -> NdTensorView<'a, f32, 2> {
+        if let Some(excluded_char_labels) = excluded_char_labels {
+            for row in 0..input_seq_slice.size(0) {
+                for &excluded_char_label in excluded_char_labels.iter() {
+                    // Setting the output value of excluded char to -Inf causes the
+                    // `decode_method` to favour chars other than the excluded char.
+                    (*input_seq_slice)[[row, excluded_char_label]] = f32::NEG_INFINITY;
+                }
+            }
+        }
+        input_seq_slice.view()
     }
 }
 
