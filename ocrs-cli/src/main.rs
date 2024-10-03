@@ -118,22 +118,28 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     use lexopt::prelude::*;
 
     let mut values = VecDeque::new();
+    let mut allowed_chars = None;
+    let mut alphabet = None;
     let mut beam_search = false;
     let mut debug = false;
     let mut detection_model = None;
     let mut output_format = OutputFormat::Text;
     let mut output_path = None;
     let mut recognition_model = None;
+    let mut text_line_images = false;
     let mut text_map = false;
     let mut text_mask = false;
-    let mut text_line_images = false;
-    let mut allowed_chars = None;
-    let mut alphabet = None;
 
     let mut parser = lexopt::Parser::from_env();
     while let Some(arg) = parser.next()? {
         match arg {
             Value(val) => values.push_back(val.string()?),
+            Long("allowed-chars") => {
+                allowed_chars = Some(parser.value()?.string()?);
+            }
+            Short('a') | Long("alphabet") => {
+                alphabet = Some(parser.value()?.string()?);
+            }
             Long("beam") => {
                 beam_search = true;
             }
@@ -152,9 +158,6 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             Short('p') | Long("png") => {
                 output_format = OutputFormat::Png;
             }
-            Short('a') | Long("alphabet") => {
-                alphabet = Some(parser.value()?.string()?);
-            }
             Long("rec-model") => {
                 recognition_model = Some(parser.value()?.string()?);
             }
@@ -167,9 +170,6 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             Long("text-mask") => {
                 text_mask = true;
             }
-            Long("allowed-chars") => {
-                allowed_chars = Some(parser.value()?.string()?);
-            }
             Long("help") => {
                 println!(
                     "Extract text from an image.
@@ -177,6 +177,14 @@ fn parse_args() -> Result<Args, lexopt::Error> {
 Usage: {bin_name} [OPTIONS] <image>
 
 Options:
+
+  --allowed-chars <chars>
+
+    Filter characters produced by text recognition
+
+  -a, --alphabet <chars>
+
+    Specify the alphabet used by the recognition model
 
   --detect-model <path>
 
@@ -197,14 +205,6 @@ Options:
   --rec-model <path>
 
     Use a custom text recognition model
-
-  -a, --alphabet \"alphabet\"
-
-    Specify the alphabet used by the recognition model
-
-  --allowed-chars \"allowed-chars\"
-
-    Filter characters produced by text recognition
 
   --version
 
