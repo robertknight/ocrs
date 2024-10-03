@@ -295,10 +295,11 @@ fn text_lines_from_recognition_results(
 
                     let char = alphabet
                         .chars()
-                        // [See orcs-models github repo, ocrs_models/dataset/utils.py(encode)]
-                        // Index `0` is reserved for blank character and `i + 1` is used as
-                        // training label for character at index `i` of `alphabet` string.
-                        // Here we're subtracting 1 to get the actual index from the output label
+                        // Index `0` is reserved for blank character and `i + 1` is used as training
+                        // label for character at index `i` of `alphabet` string.  Here we're
+                        // subtracting 1 to get the actual index from the output label
+                        //
+                        // See https://github.com/robertknight/ocrs-models/blob/3d98fc655d6fd4acddc06e7f5d60a55b55748a48/ocrs_models/datasets/util.py#L113
                         .nth((step.label - 1) as usize)
                         .unwrap_or('?');
 
