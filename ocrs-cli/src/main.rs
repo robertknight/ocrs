@@ -300,6 +300,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     })?;
 
     // Initialize OCR engine.
+    #[allow(clippy::needless_update)]
     let engine = OcrEngine::new(OcrEngineParams {
         detection_model: Some(detection_model),
         recognition_model: Some(recognition_model),
