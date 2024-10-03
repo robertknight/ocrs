@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved error message if custom alphabet size does not match recognition
   model output (https://github.com/robertknight/ocrs/pull/126)
 
-- Updated README to note the importance of building project, or at least the
+- Updated README to note the importance of building the project, or at least the
   rten dependencies, in release mode
   (https://github.com/robertknight/ocrs/pull/118). Thanks @ezkangaroo.
 
