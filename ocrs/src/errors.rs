@@ -8,15 +8,15 @@ pub enum ModelRunError {
     RunFailed(Box<dyn Error + Send + Sync>),
 
     /// The model output had a different data type or shape than expected.
-    WrongOutput,
+    WrongOutput(String),
 }
 
 impl fmt::Display for ModelRunError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             ModelRunError::RunFailed(err) => write!(f, "model run failed: {}", err),
-            ModelRunError::WrongOutput => {
-                write!(f, "model output had unexpected type or shape")
+            ModelRunError::WrongOutput(err) => {
+                write!(f, "model output had unexpected type or shape: {}", err)
             }
         }
     }
