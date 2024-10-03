@@ -556,6 +556,11 @@ impl TextRecognizer {
         Ok(text_lines)
     }
 
+    /// Post-process recognition model outputs to filter excluded characters.
+    ///
+    /// `input_seq_slice` is a (seq, char_prob) matrix of log probabilities for
+    /// characters. `excluded_char_labels` specifies indices of characters that
+    /// should be excluded, by setting the log probability to -Inf.
     fn filter_excluded_char_labels<'a>(
         excluded_char_labels: Option<&[usize]>,
         input_seq_slice: &'a mut NdTensorViewMut<'_, f32, 2>,

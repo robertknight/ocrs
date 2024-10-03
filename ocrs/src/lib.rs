@@ -58,10 +58,14 @@ pub struct OcrEngineParams {
     /// models](https://github.com/robertknight/ocrs-models).
     pub alphabet: Option<String>,
 
-    /// Recognize text using allowed characters only.
+    /// Set of characters that may be produced by text recognition.
+    ///
     /// This is useful when you need the text recognition model to
-    /// produce text using valid set of predefined characters.
-    /// for eg. Numbers only, small-case/capital case letters only.
+    /// produce text that only includes a predefined set of characters, for
+    /// example only numbers or lower-case letters.
+    ///
+    /// If this option is not set, text recognition may produce any character
+    /// from the recognition model's alphabet.
     pub allowed_chars: Option<String>,
 }
 
@@ -75,7 +79,9 @@ pub struct OcrEngine {
     debug: bool,
     decode_method: DecodeMethod,
     alphabet: String,
-    // This value is generated from `allowed-characters` member of `OCREngineParams`
+
+    /// Indices of characters in `alphabet` that are excluded from recognition
+    /// output. See [`OcrEngineParams::allowed_chars`].
     excluded_char_labels: Option<Vec<usize>>,
 }
 
@@ -108,9 +114,11 @@ impl OcrEngine {
                 .enumerate()
                 .filter_map(|(index, char)| {
                     if !allowed_characters.contains(char) {
-                        // [See orcs-models github repo, ocrs_models/dataset/utils.py(encode)]
-                        // Index `0` is reserved for blank character and `i + 1` is used as
-                        // training label for character at index `i` of `alphabet` string.
+                        // Index `0` is reserved for the CTC blank character and
+                        // `i + 1` is used as training label for character at
+                        // index `i` of `alphabet` string.
+                        //
+                        // See https://github.com/robertknight/ocrs-models/blob/3d98fc655d6fd4acddc06e7f5d60a55b55748a48/ocrs_models/datasets/util.py#L113
                         Some(index + 1)
                     } else {
                         None
