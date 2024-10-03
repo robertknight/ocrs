@@ -523,4 +523,41 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_ocr_engine_filter_chars() -> Result<(), Box<dyn Error>> {
+        let mut image = NdTensor::zeros([1, 64, 32]);
+
+        // Set the probability of "0" to 0.7 and "1" to 0.3.
+        image.slice_mut::<2, _>((.., 2, ..)).fill(0.7);
+        image.slice_mut::<2, _>((.., 3, ..)).fill(0.3);
+
+        let (rec_model, alphabet) = fake_recognition_model();
+        test_recognition(
+            OcrEngineParams {
+                detection_model: None,
+                recognition_model: Some(rec_model),
+                alphabet: Some(alphabet),
+                ..Default::default()
+            },
+            image.view(),
+            "0",
+        )?;
+
+        // Run recognition again but exclude "0" from the output.
+        let (rec_model, alphabet) = fake_recognition_model();
+        test_recognition(
+            OcrEngineParams {
+                detection_model: None,
+                recognition_model: Some(rec_model),
+                alphabet: Some(alphabet),
+                allowed_chars: Some("123456789".into()),
+                ..Default::default()
+            },
+            image.view(),
+            "1",
+        )?;
+
+        Ok(())
+    }
 }
