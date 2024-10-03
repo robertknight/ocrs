@@ -337,7 +337,7 @@ mod tests {
     /// This takes an NCHW input with C=1, H=64 and returns an output with
     /// shape `[W / 4, N, C]`. In the real model the last dimension is the
     /// log-probability of each class label. In this fake we just re-interpret
-    /// each column of the input as a one-hot vector of probabilities.
+    /// each column of the input as a vector of probabilities.
     ///
     /// Returns a `(model, alphabet)` tuple.
     fn fake_recognition_model() -> (Model, String) {
@@ -466,8 +466,8 @@ mod tests {
 
     // Test recognition using a dummy recognition model.
     //
-    // The dummy model treats each column of the input image as a one-hot vector
-    // of character class probabilities. Pre-processing of the input will shift
+    // The dummy model treats each column of the input image as a vector of
+    // character class probabilities. Pre-processing of the input will shift
     // values from [0, 1] to [-0.5, 0.5]. CTC decoding of the output will ignore
     // class 0 (as it represents a CTC blank) and repeated characters.
     //
