@@ -241,12 +241,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "302d7ab3130588088d277783b1e2d2e10c9e9e4a16dd9050e6ec93fb3e7048f4"
 
 [[package]]
-name = "libm"
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ec2a862134d2a7d32d7983ddcdd1c4923530833c9f2ea1a44fc5fa473989058"
-
-[[package]]
 name = "log"
 version = "0.4.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -409,12 +403,11 @@ dependencies = [
 
 [[package]]
 name = "rten"
-version = "0.13.1"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52026aa6d9bc40ac0d52bfeb4bc81d4fd5b7866825af1826ed7a4d74bd7574c4"
+checksum = "4e7717d0a29d6fa2d1ae66053aaf85577d186718d3b2698219b4861fdf93436e"
 dependencies = [
  "flatbuffers",
- "libm",
  "num_cpus",
  "rayon",
  "rten-simd",
@@ -427,33 +420,33 @@ dependencies = [
 
 [[package]]
 name = "rten-imageproc"
-version = "0.13.1"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cbf57cb94ff55c8107d534114d23bc8116bb64d68da0927c972db150bea3279"
+checksum = "9e91b2ce3738cd5b7d38abb2a69007b9032402be65eca7074264a587a6334f0f"
 dependencies = [
  "rten-tensor",
 ]
 
 [[package]]
 name = "rten-simd"
-version = "0.11.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f1bb63fc8a157699e42a501cf43512871b20d3bea755f3ffac3ab63f1af10c4"
+checksum = "2e5421816b02c13e647bc38aca1cb1046c1ab12b82ed20db3a6c051b17e8543a"
 
 [[package]]
 name = "rten-tensor"
-version = "0.13.1"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "575ec5dbc7e7059eb4271bca1c06420d240e8a377593cbac41a0c7227ec8645d"
+checksum = "06450fce021c840a5b1bb555e273cc1ba554edb0f68a11ede9972ae09dd55125"
 dependencies = [
  "smallvec",
 ]
 
 [[package]]
 name = "rten-vecmath"
-version = "0.11.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af98a4e48d69c5aa2167d3adb7a8c1585602486a1aedd1ee8b3d684f98059396"
+checksum = "211beb25375623eeff508ed51e1837a6d73ff6488a944aa1ff217dcd53c15700"
 dependencies = [
  "rten-simd",
 ]

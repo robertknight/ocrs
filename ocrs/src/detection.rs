@@ -196,7 +196,7 @@ impl TextDetector {
         // Resize probability mask to original input size and apply threshold to get a
         // binary text/not-text mask.
         let text_mask = text_mask
-            .slice::<4, _>((
+            .slice((
                 ..,
                 ..,
                 ..(in_height - pad_bottom as usize),
