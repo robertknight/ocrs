@@ -507,7 +507,7 @@ mod tests {
 
         // Set the probability of character 1 in the alphabet ('0') to 1 and
         // leave all other characters with a probability of zero.
-        image.slice_mut::<2, _>((.., 2, ..)).fill(1.);
+        image.slice_mut((.., 2, ..)).fill(1.);
 
         let (rec_model, alphabet) = fake_recognition_model();
         test_recognition(
@@ -529,8 +529,8 @@ mod tests {
         let mut image = NdTensor::zeros([1, 64, 32]);
 
         // Set the probability of "0" to 0.7 and "1" to 0.3.
-        image.slice_mut::<2, _>((.., 2, ..)).fill(0.7);
-        image.slice_mut::<2, _>((.., 3, ..)).fill(0.3);
+        image.slice_mut((.., 2, ..)).fill(0.7);
+        image.slice_mut((.., 3, ..)).fill(0.3);
 
         let (rec_model, alphabet) = fake_recognition_model();
         test_recognition(
