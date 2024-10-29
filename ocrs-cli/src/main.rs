@@ -1,9 +1,11 @@
 use std::collections::VecDeque;
-use std::error::Error;
 use std::fs;
 use std::io::BufWriter;
 
 use anyhow::{anyhow, Context};
+use clipboard_rs::common::RustImage;
+use clipboard_rs::{Clipboard, RustImageData};
+use image::{DynamicImage, ImageBuffer, Rgb, Rgba};
 use ocrs::{DecodeMethod, DimOrder, ImageSource, OcrEngine, OcrEngineParams, OcrInput};
 use rten_imageproc::RotatedRect;
 use rten_tensor::prelude::*;
@@ -82,8 +84,8 @@ struct Args {
     /// Path to text recognition model.
     recognition_model: Option<String>,
 
-    /// Path to image to process.
-    image: String,
+    /// Path to image to process, None if `clip` is true.
+    image: Option<String>,
 
     /// Enable debug output.
     debug: bool,
@@ -126,6 +128,7 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     let mut output_format = OutputFormat::Text;
     let mut output_path = None;
     let mut recognition_model = None;
+    let mut clip = false;
     let mut text_line_images = false;
     let mut text_map = false;
     let mut text_mask = false;
@@ -148,6 +151,9 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             }
             Long("detect-model") => {
                 detection_model = Some(parser.value()?.string()?);
+            }
+            Short('c') | Long("clip") => {
+                clip = true;
             }
             Short('j') | Long("json") => {
                 output_format = OutputFormat::Json;
@@ -185,6 +191,10 @@ Options:
   -a, --alphabet <chars>
 
     Specify the alphabet used by the recognition model
+
+  -c, --clip
+                  
+    Use image from clipboard instead of path
 
   --detect-model <path>
 
@@ -246,6 +256,12 @@ Advanced options:
         }
     }
 
+    let image = match (clip, values.pop_front()) {
+      (true, Some(_)) => return Err(lexopt::Error::Custom("Cannot input both clipboard image and path".into())),
+      (true, None) => None,
+      (false, value) => Some(value.ok_or("missing <image> arg, or --clip flag")?),
+  };
+
     Ok(Args {
         alphabet,
         beam_search,
@@ -253,7 +269,7 @@ Advanced options:
         detection_model,
         output_format,
         output_path,
-        image: values.pop_front().ok_or("missing `<image>` arg")?,
+        image,
         recognition_model,
         text_map,
         text_mask,
@@ -269,7 +285,24 @@ const DETECTION_MODEL: &str = "https://ocrs-models.s3-accelerate.amazonaws.com/t
 const RECOGNITION_MODEL: &str =
     "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten";
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn open_image(src: &str) -> anyhow::Result<ImageBuffer<Rgb<u8>, Vec<u8>>> {
+    image::open(src)
+        .map(|img| img.into_rgb8())
+        .with_context(|| format!("Failed to read image from {src}"))
+}
+
+fn get_image_from_clipboard() -> anyhow::Result<ImageBuffer<Rgb<u8>, Vec<u8>>> {
+  let Ok(clipboard) = clipboard_rs::ClipboardContext::new() else {
+      anyhow::bail!("Failed to initialize clipboard");
+  };
+  let img = match clipboard.get_image() {
+      Ok(data) => data.get_dynamic_image().unwrap().to_rgb8(),
+      _ => anyhow::bail!("No clipboard image data!"),
+  };
+  Ok(img)
+}
+
+fn main() -> anyhow::Result<()> {
     let args = parse_args()?;
 
     // Fetch and load ML models.
@@ -316,17 +349,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     })?;
 
     // Read image into HWC tensor.
-    let color_img: NdTensor<u8, 3> = image::open(&args.image)
-        .map(|image| {
-            let image = image.into_rgb8();
-            let (width, height) = image.dimensions();
-            let in_chans = 3;
-            NdTensor::from_data(
-                [height as usize, width as usize, in_chans],
-                image.into_vec(),
-            )
-        })
-        .with_context(|| format!("Failed to read image from {}", &args.image))?;
+
+    let image = match &args.image {
+        Some(path) => open_image(path),
+        None => get_image_from_clipboard(),
+    }?;
+    let (width, height) = image.dimensions();
+    let in_chans = 3;
+    let color_img = NdTensor::from_data(
+        [height as usize, width as usize, in_chans],
+        image.into_vec(),
+    );
+
 
     // Preprocess image for use with OCR engine.
     let color_img_source = ImageSource::from_tensor(color_img.view(), DimOrder::Hwc)?;
@@ -357,7 +391,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let line_texts = engine.recognize_text(&ocr_input, &line_rects)?;
 
-    let write_output_str = |content: String| -> Result<(), Box<dyn Error>> {
+    let write_output_str = |content: String| -> Result<(), anyhow::Error> {
         if let Some(output_path) = &args.output_path {
             std::fs::write(output_path, content.into_bytes())
                 .with_context(|| format!("Failed to write output to {}", output_path))?;
@@ -374,7 +408,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         OutputFormat::Json => {
             let content = format_json_output(FormatJsonArgs {
-                input_path: &args.image,
+                input_path: args.image.as_deref().unwrap_or("Clipboard image"),
                 input_hw: color_img.shape()[1..].try_into()?,
                 text_lines: &line_texts,
             });
@@ -388,7 +422,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             };
             let annotated_img = generate_annotated_png(png_args);
             let Some(output_path) = args.output_path else {
-                return Err("Output path must be specified when generating annotated PNG".into());
+                anyhow::bail!("Output path must be specified when generating annotated PNG");
             };
             write_image(&output_path, annotated_img.view())
                 .with_context(|| format!("Failed to write output to {}", &output_path))?;
@@ -407,3 +441,5 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+
