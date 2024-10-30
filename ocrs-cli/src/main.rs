@@ -257,10 +257,17 @@ Advanced options:
     }
 
     let image = match (clip, values.pop_front()) {
-      (true, Some(_)) => return Err(lexopt::Error::Custom("Cannot input both clipboard image and path".into())),
-      (true, None) => None,
-      (false, value) => Some(value.ok_or("missing <image> arg, or --clip flag")?),
-  };
+        (true, Some(_)) => {
+            println!("Warning: Ignoring image path, using clipboard instead");
+            None
+        }
+        (true, None) => None,
+        (false, Some(val)) => Some(val),
+        (false, None) => {
+            println!("Error: No image path or clipboard option provided");
+            std::process::exit(1);
+        }
+    };
 
     Ok(Args {
         alphabet,
@@ -292,14 +299,14 @@ fn open_image(src: &str) -> anyhow::Result<ImageBuffer<Rgb<u8>, Vec<u8>>> {
 }
 
 fn get_image_from_clipboard() -> anyhow::Result<ImageBuffer<Rgb<u8>, Vec<u8>>> {
-  let Ok(clipboard) = clipboard_rs::ClipboardContext::new() else {
-      anyhow::bail!("Failed to initialize clipboard");
-  };
-  let img = match clipboard.get_image() {
-      Ok(data) => data.get_dynamic_image().unwrap().to_rgb8(),
-      _ => anyhow::bail!("No clipboard image data!"),
-  };
-  Ok(img)
+    let Ok(clipboard) = clipboard_rs::ClipboardContext::new() else {
+        anyhow::bail!("Failed to initialize clipboard");
+    };
+    let img = match clipboard.get_image() {
+        Ok(data) => data.get_dynamic_image().unwrap().to_rgb8(),
+        _ => anyhow::bail!("No clipboard image data!"),
+    };
+    Ok(img)
 }
 
 fn main() -> anyhow::Result<()> {
@@ -360,7 +367,6 @@ fn main() -> anyhow::Result<()> {
         [height as usize, width as usize, in_chans],
         image.into_vec(),
     );
-
 
     // Preprocess image for use with OCR engine.
     let color_img_source = ImageSource::from_tensor(color_img.view(), DimOrder::Hwc)?;
@@ -441,5 +447,3 @@ fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
-
-
