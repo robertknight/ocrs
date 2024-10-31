@@ -245,7 +245,6 @@ Advanced options:
 ",
                     if cfg!(feature = "clipboard") {
                         "
-  
   -c, --clip
 
     Use image from clipboard instead of path"
