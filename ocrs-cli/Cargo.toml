@@ -19,7 +19,7 @@ ocrs = { path = "../ocrs", version = "0.9.0" }
 lexopt = "0.3.0"
 url = "2.5.2"
 anyhow = "1.0.89"
-clipboard-rs = "0.2.1"
+arboard = { version = "3.4.1", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ureq = "2.10.1"
@@ -28,6 +28,7 @@ home = "0.5.9"
 [features]
 # Use AVX-512 instructions if available. Requires nightly Rust.
 avx512 = ["rten/avx512"]
+clipboard = ["dep:arboard"]
 
 [[bin]]
 name = "ocrs"

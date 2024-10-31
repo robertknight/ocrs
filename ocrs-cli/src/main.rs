@@ -3,8 +3,9 @@ use std::fs;
 use std::io::BufWriter;
 
 use anyhow::{anyhow, Context};
-use clipboard_rs::common::RustImage;
-use clipboard_rs::{Clipboard, RustImageData};
+#[cfg(feature = "clipboard")]
+use std::borrow::Cow;
+// use clipboard_rs::{common::RustImage, Clipboard, RustImageData};
 use image::{DynamicImage, ImageBuffer, Rgb, Rgba};
 use ocrs::{DecodeMethod, DimOrder, ImageSource, OcrEngine, OcrEngineParams, OcrInput};
 use rten_imageproc::RotatedRect;
@@ -152,6 +153,7 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             Long("detect-model") => {
                 detection_model = Some(parser.value()?.string()?);
             }
+            #[cfg(feature = "clipboard")]
             Short('c') | Long("clip") => {
                 clip = true;
             }
@@ -191,10 +193,7 @@ Options:
   -a, --alphabet <chars>
 
     Specify the alphabet used by the recognition model
-
-  -c, --clip
-                  
-    Use image from clipboard instead of path
+  {}
 
   --detect-model <path>
 
@@ -244,7 +243,16 @@ Advanced options:
 
     Generate a binary text mask for the input image
 ",
-                    bin_name = parser.bin_name().unwrap_or("ocrs")
+                    if cfg!(feature = "clipboard") {
+                        "
+  
+  -c, --clip
+
+    Use image from clipboard instead of path"
+                    } else {
+                        ""
+                    },
+                    bin_name = parser.bin_name().unwrap_or("ocrs"),
                 );
                 std::process::exit(0);
             }
@@ -256,6 +264,7 @@ Advanced options:
         }
     }
 
+    #[cfg(feature = "clipboard")]
     let image = match (clip, values.pop_front()) {
         (true, Some(_)) => {
             println!("Warning: Ignoring image path, using clipboard instead");
@@ -268,6 +277,9 @@ Advanced options:
             std::process::exit(1);
         }
     };
+
+    #[cfg(not(feature = "clipboard"))]
+    let image = Some(values.pop_front().ok_or("missing <image> argument")?);
 
     Ok(Args {
         alphabet,
@@ -292,19 +304,26 @@ const DETECTION_MODEL: &str = "https://ocrs-models.s3-accelerate.amazonaws.com/t
 const RECOGNITION_MODEL: &str =
     "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten";
 
-fn open_image(src: &str) -> anyhow::Result<ImageBuffer<Rgb<u8>, Vec<u8>>> {
+fn open_image(src: &str) -> anyhow::Result<ImageBuffer<Rgba<u8>, Vec<u8>>> {
     image::open(src)
-        .map(|img| img.into_rgb8())
+        .map(DynamicImage::into_rgba8)
         .with_context(|| format!("Failed to read image from {src}"))
 }
 
-fn get_image_from_clipboard() -> anyhow::Result<ImageBuffer<Rgb<u8>, Vec<u8>>> {
-    let Ok(clipboard) = clipboard_rs::ClipboardContext::new() else {
+#[cfg(feature = "clipboard")]
+fn get_image_from_clipboard() -> anyhow::Result<ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    let Ok(mut clipboard) = arboard::Clipboard::new() else {
         anyhow::bail!("Failed to initialize clipboard");
     };
-    let img = match clipboard.get_image() {
-        Ok(data) => data.get_dynamic_image().unwrap().to_rgb8(),
-        _ => anyhow::bail!("No clipboard image data!"),
+    let Ok(data) = clipboard.get_image() else {
+        anyhow::bail!("No clipboard image data!");
+    };
+    let Some(img) = ImageBuffer::<Rgba<u8>, _>::from_raw(
+        data.width as u32,
+        data.height as u32,
+        data.bytes.into_owned(),
+    ) else {
+        anyhow::bail!("Failed to create image from clipboard data");
     };
     Ok(img)
 }
@@ -357,15 +376,19 @@ fn main() -> anyhow::Result<()> {
 
     // Read image into HWC tensor.
 
+    #[cfg(feature = "clipboard")]
     let image = match &args.image {
         Some(path) => open_image(path),
         None => get_image_from_clipboard(),
     }?;
+    #[cfg(not(feature = "clipboard"))]
+    let image = open_image(args.image.as_deref().expect("Always set if clipboard disabled"))?;
+
     let (width, height) = image.dimensions();
-    let in_chans = 3;
+    let in_chans = 4;
     let color_img = NdTensor::from_data(
         [height as usize, width as usize, in_chans],
-        image.into_vec(),
+        image.into_raw(),
     );
 
     // Preprocess image for use with OCR engine.
