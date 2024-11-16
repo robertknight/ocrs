@@ -14,7 +14,7 @@ rayon = "1.10.0"
 rten = { workspace = true }
 rten-imageproc = { workspace = true }
 rten-tensor = { workspace = true }
-thiserror = "1.0.63"
+thiserror = "1.0.66"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # nb. When changing this, make sure the version of wasm-bindgen-cli installed
