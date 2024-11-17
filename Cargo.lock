@@ -409,9 +409,9 @@ dependencies = [
 
 [[package]]
 name = "rten"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e7717d0a29d6fa2d1ae66053aaf85577d186718d3b2698219b4861fdf93436e"
+checksum = "c272639fd7727a7e8d21dc25b9b674c9021dcd4b663f7425b522b377aaadedd3"
 dependencies = [
  "flatbuffers",
  "num_cpus",
@@ -435,24 +435,24 @@ dependencies = [
 
 [[package]]
 name = "rten-simd"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e5421816b02c13e647bc38aca1cb1046c1ab12b82ed20db3a6c051b17e8543a"
+checksum = "e491fbae05cf42d15fa282fe4a9ef2e32a8d088b267764412e71b39015bdcd50"
 
 [[package]]
 name = "rten-tensor"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06450fce021c840a5b1bb555e273cc1ba554edb0f68a11ede9972ae09dd55125"
+checksum = "3537b3a982a7e5ed5d0487a6c708f5d89c1fd418830fd136c12fd9cffa7a85f2"
 dependencies = [
  "smallvec",
 ]
 
 [[package]]
 name = "rten-vecmath"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "211beb25375623eeff508ed51e1837a6d73ff6488a944aa1ff217dcd53c15700"
+checksum = "c1a5fd718507ec51e7ecdf050a19fa02afecfcdbb7e03f0e75eb09a7607fb2cb"
 dependencies = [
  "rten-simd",
 ]
