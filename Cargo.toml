@@ -7,5 +7,5 @@ members = [
 
 [workspace.dependencies]
 rten = { version = "0.14.0" }
-rten-imageproc = { version = "0.14.0" }
+rten-imageproc = { version = "0.14.1" }
 rten-tensor = { version = "0.14.0" }
