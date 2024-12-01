@@ -21,7 +21,7 @@ url = "2.5.2"
 anyhow = "1.0.92"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-ureq = "2.10.1"
+ureq = "2.11.0"
 home = "0.5.9"
 
 [features]
