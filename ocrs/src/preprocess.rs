@@ -25,7 +25,7 @@ impl<'a> From<NdTensorView<'a, u8, 3>> for ImagePixels<'a> {
     }
 }
 
-impl<'a> ImagePixels<'a> {
+impl ImagePixels<'_> {
     fn shape(&self) -> [usize; 3] {
         match self {
             ImagePixels::Floats(f) => f.shape(),
