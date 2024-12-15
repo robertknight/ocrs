@@ -79,7 +79,7 @@ pub enum ModelSource<'a> {
     Path(&'a str),
 }
 
-impl<'a> fmt::Display for ModelSource<'a> {
+impl fmt::Display for ModelSource<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,

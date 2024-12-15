@@ -94,19 +94,19 @@ pub struct TextWord<'a> {
 }
 
 impl<'a> TextWord<'a> {
-    fn new(chars: &'a [TextChar]) -> TextWord {
+    fn new(chars: &'a [TextChar]) -> TextWord<'a> {
         assert!(!chars.is_empty(), "Text words must not be empty");
         TextWord { chars }
     }
 }
 
-impl<'a> TextItem for TextWord<'a> {
+impl TextItem for TextWord<'_> {
     fn chars(&self) -> &[TextChar] {
         self.chars
     }
 }
 
-impl<'a> fmt::Display for TextWord<'a> {
+impl fmt::Display for TextWord<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt_text_item(self, f)
     }
