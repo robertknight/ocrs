@@ -432,9 +432,9 @@ dependencies = [
 
 [[package]]
 name = "rten-imageproc"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e91b2ce3738cd5b7d38abb2a69007b9032402be65eca7074264a587a6334f0f"
+checksum = "b3a6f2131ce6e0d2c0d30563958de17f47d3e2607f6b2548d534be82ec50453a"
 dependencies = [
  "rten-tensor",
 ]
