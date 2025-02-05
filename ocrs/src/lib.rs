@@ -91,6 +91,11 @@ pub struct OcrInput {
     /// CHW tensor with normalized pixel values in [BLACK_VALUE, BLACK_VALUE + 1.].
     pub(crate) image: NdTensor<f32, 3>,
 }
+impl OcrInput {
+    pub fn from_tensor(tensor: NdTensor<f32, 3>) -> Self {
+        Self { image: tensor }
+    }
+}
 
 impl OcrEngine {
     /// Construct a new engine from a given configuration.
