@@ -17,7 +17,7 @@ rten-imageproc = { workspace = true }
 rten-tensor = { workspace = true }
 ocrs = { path = "../ocrs", version = "0.10.0" }
 lexopt = "0.3.0"
-url = "2.5.2"
+url = "2.5.4"
 anyhow = "1.0.95"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
