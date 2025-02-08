@@ -310,10 +310,11 @@ mod tests {
                 Dimension::Fixed(200),
                 Dimension::Fixed(100),
             ]),
+            None,
         );
         gb.add_input(input_id);
 
-        let output_id = gb.add_value("output", None);
+        let output_id = gb.add_value("output", None, None);
         gb.add_output(output_id);
 
         let bias = Tensor::from_scalar(0.5);
@@ -353,11 +354,12 @@ mod tests {
                 Dimension::Fixed(output_columns),
                 Dimension::Symbolic("seq".to_string()),
             ]),
+            None,
         );
         gb.add_input(input_id);
 
         // MaxPool to scale width by 1/4: NCHW => NCHW/4
-        let pool_out = gb.add_value("max_pool_out", None);
+        let pool_out = gb.add_value("max_pool_out", None, None);
         gb.add_operator(
             "max_pool",
             OpType::MaxPool(MaxPool {
@@ -372,7 +374,7 @@ mod tests {
         // Squeeze to remove the channel dim: NCHW/4 => NHW/4
         let squeeze_axes = Tensor::from_vec(vec![1]);
         let squeeze_axes_id = gb.add_constant(squeeze_axes.view());
-        let squeeze_out = gb.add_value("squeeze_out", None);
+        let squeeze_out = gb.add_value("squeeze_out", None, None);
         gb.add_operator(
             "squeeze",
             OpType::Squeeze,
@@ -381,7 +383,7 @@ mod tests {
         );
 
         // Transpose: NHW/4 => W/4NH
-        let transpose_out = gb.add_value("transpose_out", None);
+        let transpose_out = gb.add_value("transpose_out", None, None);
         gb.add_operator(
             "transpose",
             OpType::Transpose(Transpose {
