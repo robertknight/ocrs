@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io::Read;
 use std::path::PathBuf;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -53,11 +54,11 @@ fn download_file(url: &str, filename: Option<&str>) -> Result<PathBuf, anyhow::E
 
     eprintln!("Downloading {}...", url);
 
-    let mut reader = ureq::get(url).call()?.into_reader();
-    let mut body = Vec::new();
-    reader.read_to_end(&mut body)?;
+    let mut body = ureq::get(url).call()?.into_body();
+    let mut buf = Vec::new();
+    body.as_reader().read_to_end(&mut buf)?;
 
-    fs::write(&file_path, &body)?;
+    fs::write(&file_path, &buf)?;
 
     Ok(file_path)
 }
