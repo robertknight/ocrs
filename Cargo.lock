@@ -322,7 +322,7 @@ dependencies = [
 
 [[package]]
 name = "ocrs-cli"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "anyhow",
  "home",
