@@ -39,7 +39,7 @@ To install the CLI tool, you will first need Rust and Cargo installed. Then
 run:
 
 ```sh
-$ cargo install ocrs-cli
+$ cargo install ocrs-cli --locked
 ```
 
 ## CLI usage
