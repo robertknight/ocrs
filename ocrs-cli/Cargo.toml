@@ -22,7 +22,7 @@ anyhow = "1.0.95"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ureq = "3.0.5"
-home = "0.5.9"
+home = "0.5.11"
 
 [features]
 # Use AVX-512 instructions if available. Requires nightly Rust.
