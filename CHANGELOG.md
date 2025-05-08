@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.3] - 2025-05-08
+
+- Improved performance on Arm by 20-30%, by updating to rten v0.18
+
 ## [0.10.2] - 2025-02-09
 
 - Disabled IDNA support in ocrs-cli's `url` dependency. This removes various
