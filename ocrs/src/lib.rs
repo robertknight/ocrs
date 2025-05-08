@@ -363,9 +363,9 @@ mod tests {
         gb.add_operator(
             "max_pool",
             OpType::MaxPool(MaxPool {
-                kernel_size: [1, 4],
+                kernel_size: [1, 4].into(),
                 padding: [0, 0, 0, 0].into(),
-                strides: [1, 4],
+                strides: [1, 4].into(),
             }),
             &[Some(input_id)],
             &[pool_out],
