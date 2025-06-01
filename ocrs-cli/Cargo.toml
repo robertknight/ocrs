@@ -16,7 +16,7 @@ rten = { workspace = true }
 rten-imageproc = { workspace = true }
 rten-tensor = { workspace = true }
 ocrs = { path = "../ocrs", version = "0.10.3" }
-lexopt = "0.3.0"
+lexopt = "0.3.1"
 url = "2.5.4"
 anyhow = "1.0.98"
 
