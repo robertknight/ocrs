@@ -6,6 +6,6 @@ members = [
 ]
 
 [workspace.dependencies]
-rten = { version = ">= 0.14.0, < 0.21.0" }
-rten-imageproc = { version = ">= 0.14.0, < 0.21.0" }
-rten-tensor = { version = ">= 0.14.0, < 0.21.0" }
+rten = { version = ">= 0.14.0, < 0.22.0" }
+rten-imageproc = { version = ">= 0.14.0, < 0.22.0" }
+rten-tensor = { version = ">= 0.14.0, < 0.22.0" }
