@@ -1,6 +1,6 @@
 [package]
 name = "ocrs"
-version = "0.10.3"
+version = "0.10.4"
 edition = "2021"
 authors = ["Robert Knight"]
 description = "OCR engine"

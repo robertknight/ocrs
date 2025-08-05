@@ -1,6 +1,6 @@
 [package]
 name = "ocrs-cli"
-version = "0.10.3"
+version = "0.10.4"
 edition = "2021"
 authors = ["Robert Knight"]
 description = "OCR CLI tool for extracting text from images"
@@ -15,7 +15,7 @@ serde_json = "1.0.140"
 rten = { workspace = true }
 rten-imageproc = { workspace = true }
 rten-tensor = { workspace = true }
-ocrs = { path = "../ocrs", version = "0.10.3" }
+ocrs = { path = "../ocrs", version = "0.10.4" }
 lexopt = "0.3.1"
 url = "2.5.4"
 anyhow = "1.0.98"

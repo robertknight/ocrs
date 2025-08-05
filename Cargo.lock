@@ -313,7 +313,7 @@ dependencies = [
 
 [[package]]
 name = "ocrs"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "fastrand",
@@ -329,7 +329,7 @@ dependencies = [
 
 [[package]]
 name = "ocrs-cli"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "home",
