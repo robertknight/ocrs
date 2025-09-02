@@ -9,7 +9,7 @@ homepage = "https://github.com/robertknight/ocrs"
 repository = "https://github.com/robertknight/ocrs"
 
 [dependencies]
-anyhow = "1.0.98"
+anyhow = "1.0.99"
 rayon = "1.10.0"
 rten = { workspace = true }
 rten-imageproc = { workspace = true }
