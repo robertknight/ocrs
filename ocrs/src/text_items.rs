@@ -73,7 +73,7 @@ impl TextLine {
     }
 
     /// Return an iterator over words in this line.
-    pub fn words(&self) -> impl Iterator<Item = TextWord> {
+    pub fn words(&self) -> impl Iterator<Item = TextWord<'_>> {
         self.chars()
             .split(|c| c.char == ' ')
             .filter(|chars| !chars.is_empty())
