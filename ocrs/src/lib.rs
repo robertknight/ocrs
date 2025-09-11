@@ -366,6 +366,7 @@ mod tests {
                 kernel_size: [1, 4].into(),
                 padding: [0, 0, 0, 0].into(),
                 strides: [1, 4].into(),
+                ceil_mode: false,
             }),
             &[Some(input_id)],
             &[pool_out],
