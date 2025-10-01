@@ -8,4 +8,4 @@ members = [
 [workspace.dependencies]
 rten = { version = "0.22.0" }
 rten-imageproc = { version = "0.22.0" }
-rten-tensor = { version = "0.22.0" }
+rten-tensor = { version = "0.22.1" }
