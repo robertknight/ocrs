@@ -69,7 +69,7 @@ pub struct TextDetector {
 }
 
 impl TextDetector {
-    /// Initializate a DetectionModel from a trained RTen model.
+    /// Initialize a DetectionModel from a trained RTen model.
     ///
     /// This will fail if the model doesn't have the expected inputs or outputs.
     pub fn from_model(model: Model, params: TextDetectorParams) -> anyhow::Result<TextDetector> {

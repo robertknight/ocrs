@@ -218,7 +218,7 @@ export type TextOverlayOptions = {
   container?: HTMLElement;
 
   /**
-   * Whether the overlay is automatically dimissed when you click outside of
+   * Whether the overlay is automatically dismissed when you click outside of
    * it. Defaults to true.
    */
   autoDismiss?: boolean;
