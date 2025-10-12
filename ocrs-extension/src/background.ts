@@ -382,7 +382,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     // Set up callback that performs text recognition.
     //
     // This takes a list of line indexes as input. The recognition time per
-    // line can be up to ~45% lower when recognizing a batch of similiar-length
+    // line can be up to ~45% lower when recognizing a batch of similar-length
     // lines.
     recognizeText = (lineIndexes: number[]) => {
       const unrecognizedLines = lineIndexes.filter(
