@@ -470,9 +470,9 @@ dependencies = [
 
 [[package]]
 name = "rten-base"
-version = "0.22.0"
+version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f1340c0c9d3c801fdf9a9f6e3821844acd97167bfab623db67200d0615e9734"
+checksum = "1d410631e59ea1eccb5be1a09f80d3366ecd31fe1339019537b17d8a7758a265"
 dependencies = [
  "rayon",
 ]
@@ -516,9 +516,9 @@ checksum = "9551ca518a75c9d6d4063e5f82db20fac446c05131474e16bf29cbd762263021"
 
 [[package]]
 name = "rten-tensor"
-version = "0.22.0"
+version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f85bd3dcae8bdd24248d4bbe32fe03c8e80d8cae40ff44f7587aca400b44c25d"
+checksum = "dfb88f55accc50383022ff3a62b78098cf63bd2f0d837d697aa5ff5bf5355847"
 dependencies = [
  "rayon",
  "rten-base",
