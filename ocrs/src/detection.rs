@@ -1,9 +1,10 @@
 use anyhow::anyhow;
-use rten::{Dimension, FloatOperators, Model, Operators, RunOptions};
+use rten::{Dimension, FloatOperators, Operators, RunOptions};
 use rten_imageproc::{find_contours, min_area_rect, simplify_polygon, RetrievalMode, RotatedRect};
 use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView, Tensor};
 
+use crate::model::Model;
 use crate::preprocess::BLACK_VALUE;
 
 /// Parameters that control post-processing of text detection model outputs.
@@ -63,7 +64,7 @@ fn find_connected_component_rects(
 /// Text detector which finds the oriented bounding boxes of words in an input
 /// image.
 pub struct TextDetector {
-    model: Model,
+    model: Box<dyn Model>,
     params: TextDetectorParams,
     input_shape: Vec<Dimension>,
 }
@@ -72,19 +73,13 @@ impl TextDetector {
     /// Initialize a DetectionModel from a trained RTen model.
     ///
     /// This will fail if the model doesn't have the expected inputs or outputs.
-    pub fn from_model(model: Model, params: TextDetectorParams) -> anyhow::Result<TextDetector> {
-        let input_id = model
-            .input_ids()
-            .first()
-            .copied()
-            .ok_or(anyhow!("model has no inputs"))?;
-        let input_shape = model
-            .node_info(input_id)
-            .and_then(|info| info.shape())
-            .ok_or(anyhow!("model does not specify expected input shape"))?;
-
+    pub fn from_model(
+        model: impl Model + 'static,
+        params: TextDetectorParams,
+    ) -> anyhow::Result<TextDetector> {
+        let input_shape = model.input_shape()?;
         Ok(TextDetector {
-            model,
+            model: Box::new(model),
             params,
             input_shape,
         })
@@ -177,21 +172,18 @@ impl TextDetector {
 
         // Run text detection model to compute a probability mask indicating whether
         // each pixel is part of a text word or not.
-        let text_mask: Tensor<f32> = self
-            .model
-            .run_one(
-                image.view().into(),
-                if debug {
-                    Some(RunOptions {
-                        timing: true,
-                        verbose: false,
-                        ..Default::default()
-                    })
-                } else {
-                    None
-                },
-            )?
-            .try_into()?;
+        let text_mask: Tensor<f32> = self.model.run(
+            image.view(),
+            if debug {
+                Some(RunOptions {
+                    timing: true,
+                    verbose: false,
+                    ..Default::default()
+                })
+            } else {
+                None
+            },
+        )?;
 
         // Resize probability mask to original input size and apply threshold to get a
         // binary text/not-text mask.

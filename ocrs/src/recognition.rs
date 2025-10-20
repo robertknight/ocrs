@@ -1,10 +1,9 @@
 use core::f32;
 use std::collections::HashMap;
 
-use anyhow::anyhow;
 use rayon::prelude::*;
 use rten::ctc::{CtcDecoder, CtcHypothesis};
-use rten::{thread_pool, Dimension, FloatOperators, Model, NodeId};
+use rten::{thread_pool, Dimension, FloatOperators};
 use rten_imageproc::{
     bounding_rect, BoundingRect, Line, Point, PointF, Polygon, Rect, RotatedRect,
 };
@@ -13,6 +12,7 @@ use rten_tensor::{NdTensor, NdTensorView, NdTensorViewMut, Tensor};
 
 use crate::errors::ModelRunError;
 use crate::geom_util::{downwards_line, leftmost_edge, rightmost_edge};
+use crate::model::Model;
 use crate::preprocess::BLACK_VALUE;
 use crate::text_items::{TextChar, TextLine};
 
@@ -313,35 +313,18 @@ fn text_lines_from_recognition_results(
 /// Extracts character sequences and coordinates from text lines detected in
 /// an image.
 pub struct TextRecognizer {
-    model: Model,
-    input_id: NodeId,
+    model: Box<dyn Model + Send + Sync>,
     input_shape: Vec<Dimension>,
-    output_id: NodeId,
 }
 
 impl TextRecognizer {
     /// Initialize a text recognizer from a trained RTen model. Fails if the
     /// model does not have the expected inputs or outputs.
-    pub fn from_model(model: Model) -> anyhow::Result<TextRecognizer> {
-        let input_id = model
-            .input_ids()
-            .first()
-            .copied()
-            .ok_or(anyhow!("recognition model has no inputs"))?;
-        let input_shape = model
-            .node_info(input_id)
-            .and_then(|info| info.shape())
-            .ok_or(anyhow!("recognition model does not specify input shape"))?;
-        let output_id = model
-            .output_ids()
-            .first()
-            .copied()
-            .ok_or(anyhow!("recognition model has no outputs"))?;
+    pub fn from_model(model: impl Model + Send + Sync + 'static) -> anyhow::Result<TextRecognizer> {
+        let input_shape = model.input_shape()?;
         Ok(TextRecognizer {
-            model,
-            input_id,
-            input_shape: input_shape.into_iter().collect(),
-            output_id,
+            model: Box::new(model),
+            input_shape,
         })
     }
 
@@ -357,13 +340,9 @@ impl TextRecognizer {
     /// a `[batch, seq, label]` tensor of class probabilities.
     fn run(&self, input: NdTensor<f32, 4>) -> Result<NdTensor<f32, 3>, ModelRunError> {
         let input: Tensor<f32> = input.into();
-        let [output] = self
+        let output = self
             .model
-            .run_n(
-                vec![(self.input_id, (&input).into())],
-                [self.output_id],
-                None,
-            )
+            .run(input.view(), None)
             .map_err(|err| ModelRunError::RunFailed(err.into()))?;
 
         let output_ndim = output.ndim();

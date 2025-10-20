@@ -97,7 +97,7 @@ impl<'a> ImageSource<'a> {
             return Err(ImageSourceError::UnsupportedChannelCount);
         }
 
-        if bytes.len() % channel_len != 0 {
+        if !bytes.len().is_multiple_of(channel_len) {
             return Err(ImageSourceError::InvalidDataLength);
         }
 
