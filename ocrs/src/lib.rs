@@ -1,5 +1,4 @@
 use anyhow::anyhow;
-use rten::Model;
 use rten_imageproc::RotatedRect;
 use rten_tensor::prelude::*;
 use rten_tensor::NdTensor;
@@ -9,6 +8,7 @@ mod errors;
 mod geom_util;
 mod layout_analysis;
 mod log;
+mod model;
 mod preprocess;
 mod recognition;
 
@@ -22,6 +22,7 @@ mod wasm_api;
 
 use detection::{TextDetector, TextDetectorParams};
 use layout_analysis::find_text_lines;
+use model::Model;
 use preprocess::prepare_image;
 use recognition::{RecognitionOpt, TextRecognizer};
 
@@ -36,13 +37,13 @@ const DEFAULT_ALPHABET: &str = " 0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~EAB
 #[derive(Default)]
 pub struct OcrEngineParams {
     /// Model used to detect text words in the image.
-    pub detection_model: Option<Model>,
+    pub detection_model: Option<rten::Model>,
 
     /// Model used to recognize lines of text in the image.
     ///
     /// If using a custom model, you may need to adjust the
     /// [`alphabet`](Self::alphabet) to match.
-    pub recognition_model: Option<Model>,
+    pub recognition_model: Option<rten::Model>,
 
     /// Enable debug logging.
     pub debug: bool,
@@ -67,6 +68,40 @@ pub struct OcrEngineParams {
     /// If this option is not set, text recognition may produce any character
     /// from the recognition model's alphabet.
     pub allowed_chars: Option<String>,
+}
+
+/// Internal counterpart to [`OcrEngineParams`] which is generic over the
+/// inference engine.
+#[derive(Default)]
+struct OcrEngineParamsImpl<M: Model> {
+    detection_model: Option<M>,
+    recognition_model: Option<M>,
+    debug: bool,
+    decode_method: DecodeMethod,
+    alphabet: Option<String>,
+    allowed_chars: Option<String>,
+}
+
+impl From<OcrEngineParams> for OcrEngineParamsImpl<rten::Model> {
+    fn from(params: OcrEngineParams) -> Self {
+        let OcrEngineParams {
+            detection_model,
+            recognition_model,
+            debug,
+            decode_method,
+            alphabet,
+            allowed_chars,
+        } = params;
+
+        Self {
+            detection_model,
+            recognition_model,
+            debug,
+            decode_method,
+            alphabet,
+            allowed_chars,
+        }
+    }
 }
 
 /// Detects and recognizes text in images.
@@ -95,6 +130,13 @@ pub struct OcrInput {
 impl OcrEngine {
     /// Construct a new engine from a given configuration.
     pub fn new(params: OcrEngineParams) -> anyhow::Result<OcrEngine> {
+        Self::new_impl(params.into())
+    }
+
+    /// Internal constructor which allows using a dummy inference engine in tests.
+    fn new_impl<M: Model + Send + Sync + 'static>(
+        params: OcrEngineParamsImpl<M>,
+    ) -> anyhow::Result<OcrEngine> {
         let detector = params
             .detection_model
             .map(|model| TextDetector::from_model(model, Default::default()))
@@ -262,15 +304,13 @@ impl OcrEngine {
 mod tests {
     use std::error::Error;
 
-    use rten::model_builder::{ModelBuilder, ModelFormat, OpType};
-    use rten::ops::{MaxPool, Transpose};
     use rten::Dimension;
-    use rten::Model;
     use rten_imageproc::{fill_rect, BoundingRect, Rect, RectF, RotatedRect};
     use rten_tensor::prelude::*;
+    use rten_tensor::TensorView;
     use rten_tensor::{NdTensor, NdTensorView, Tensor};
 
-    use super::{DimOrder, ImageSource, OcrEngine, OcrEngineParams, DEFAULT_ALPHABET};
+    use super::{DimOrder, ImageSource, Model, OcrEngine, OcrEngineParamsImpl, DEFAULT_ALPHABET};
 
     /// Generate a dummy CHW input image for OCR processing.
     ///
@@ -292,48 +332,36 @@ mod tests {
         image
     }
 
-    /// Create a fake text detection model.
+    /// Fake text detection model.
     ///
     /// Takes a CHW input tensor with values in `[-0.5, 0.5]` and adds a +0.5
     /// bias to produce an output "probability map".
-    fn fake_detection_model() -> Model {
-        let mut mb = ModelBuilder::new(ModelFormat::V1);
-        let mut gb = mb.graph_builder();
+    #[derive(Default)]
+    struct FakeDetectionModel {}
 
-        let input_id = gb.add_value(
-            "input",
-            Some(&[
+    impl Model for FakeDetectionModel {
+        fn input_shape(&self) -> anyhow::Result<Vec<Dimension>> {
+            Ok([
                 Dimension::Symbolic("batch".to_string()),
                 Dimension::Fixed(1),
                 // The real model uses larger inputs (800x600). The fake uses
                 // smaller inputs to make tests run faster.
                 Dimension::Fixed(200),
                 Dimension::Fixed(100),
-            ]),
-            None,
-        );
-        gb.add_input(input_id);
+            ]
+            .into())
+        }
 
-        let output_id = gb.add_value("output", None, None);
-        gb.add_output(output_id);
-
-        let bias = Tensor::from_scalar(0.5);
-        let bias_id = gb.add_constant(bias.view());
-        gb.add_operator(
-            "add",
-            OpType::Add,
-            &[Some(input_id), Some(bias_id)],
-            &[output_id],
-        );
-
-        let graph = gb.finish();
-        mb.set_graph(graph);
-
-        let model_data = mb.finish();
-        Model::load(model_data).unwrap()
+        fn run(
+            &self,
+            input: TensorView<f32>,
+            _opts: Option<rten::RunOptions>,
+        ) -> anyhow::Result<Tensor<f32>> {
+            Ok(input.map(|v| v + 0.5))
+        }
     }
 
-    /// Create a fake text recognition model.
+    /// Fake text recognition model.
     ///
     /// This takes an NCHW input with C=1, H=64 and returns an output with
     /// shape `[W / 4, N, C]`. In the real model the last dimension is the
@@ -341,69 +369,61 @@ mod tests {
     /// each column of the input as a vector of probabilities.
     ///
     /// Returns a `(model, alphabet)` tuple.
-    fn fake_recognition_model() -> (Model, String) {
-        let mut mb = ModelBuilder::new(ModelFormat::V1);
-        let mut gb = mb.graph_builder();
+    #[derive(Default)]
+    struct FakeRecognitionModel {}
 
-        let output_columns = 64;
-        let input_id = gb.add_value(
-            "input",
-            Some(&[
+    impl Model for FakeRecognitionModel {
+        fn input_shape(&self) -> anyhow::Result<Vec<Dimension>> {
+            let output_columns = 64;
+            Ok([
                 Dimension::Symbolic("batch".to_string()),
                 Dimension::Fixed(1),
                 Dimension::Fixed(output_columns),
                 Dimension::Symbolic("seq".to_string()),
-            ]),
-            None,
-        );
-        gb.add_input(input_id);
+            ]
+            .into())
+        }
 
-        // MaxPool to scale width by 1/4: NCHW => NCHW/4
-        let pool_out = gb.add_value("max_pool_out", None, None);
-        gb.add_operator(
-            "max_pool",
-            OpType::MaxPool(MaxPool {
-                kernel_size: [1, 4].into(),
-                padding: [0, 0, 0, 0].into(),
-                strides: [1, 4].into(),
-                ceil_mode: false,
-            }),
-            &[Some(input_id)],
-            &[pool_out],
-        );
+        fn run(
+            &self,
+            input: TensorView<f32>,
+            _opts: Option<rten::RunOptions>,
+        ) -> anyhow::Result<Tensor<f32>> {
+            let nchw: NdTensorView<f32, 4> = input.try_into()?;
+            assert_eq!(nchw.size(1), 1);
 
-        // Squeeze to remove the channel dim: NCHW/4 => NHW/4
-        let squeeze_axes = Tensor::from_vec(vec![1]);
-        let squeeze_axes_id = gb.add_constant(squeeze_axes.view());
-        let squeeze_out = gb.add_value("squeeze_out", None, None);
-        gb.add_operator(
-            "squeeze",
-            OpType::Squeeze,
-            &[Some(pool_out), Some(squeeze_axes_id)],
-            &[squeeze_out],
-        );
+            let nhw = nchw.slice((.., 0)); // Remove channel axis
+            let [batch, height, width] = nhw.shape();
+            assert_eq!(height, 64);
 
-        // Transpose: NHW/4 => W/4NH
-        let transpose_out = gb.add_value("transpose_out", None, None);
-        gb.add_operator(
-            "transpose",
-            OpType::Transpose(Transpose {
-                perm: Some(vec![2, 0, 1]),
-            }),
-            &[Some(squeeze_out)],
-            &[transpose_out],
-        );
+            // Width downsampling factor.
+            const W_SCALE: usize = 4;
 
-        gb.add_output(transpose_out);
-        let graph = gb.finish();
+            // Max-pool to reduce width scale.
+            let mut output = NdTensor::zeros([batch, height, width / W_SCALE]);
+            for n in 0..batch {
+                for h in 0..height {
+                    for w_block in 0..width / W_SCALE {
+                        let mut max = f32::MIN;
+                        for i in 0..W_SCALE {
+                            max = max.max(nhw[[n, h, w_block * W_SCALE + i]]);
+                        }
+                        output[[n, h, w_block]] = max;
+                    }
+                }
+            }
 
-        mb.set_graph(graph);
+            // Transpose NHW/4 => W/4NH
+            output.permute([2, 0, 1]);
+            output.make_contiguous();
 
-        let model_data = mb.finish();
-        let model = Model::load(model_data).unwrap();
-        let alphabet = DEFAULT_ALPHABET.chars().take(output_columns - 1).collect();
+            Ok(output.into())
+        }
+    }
 
-        (model, alphabet)
+    fn make_alphabet() -> String {
+        let output_columns = 64;
+        DEFAULT_ALPHABET.chars().take(output_columns - 1).collect()
     }
 
     /// Return expected word locations for an image generated by
@@ -427,8 +447,8 @@ mod tests {
     #[test]
     fn test_ocr_engine_prepare_input() -> Result<(), Box<dyn Error>> {
         let image = gen_test_image(3 /* n_words */);
-        let engine = OcrEngine::new(OcrEngineParams {
-            detection_model: None,
+        let engine = OcrEngine::new_impl(OcrEngineParamsImpl {
+            detection_model: Some(FakeDetectionModel {}),
             recognition_model: None,
             ..Default::default()
         })?;
@@ -446,8 +466,8 @@ mod tests {
     fn test_ocr_engine_detect_words() -> Result<(), Box<dyn Error>> {
         let n_words = 3;
         let image = gen_test_image(n_words);
-        let engine = OcrEngine::new(OcrEngineParams {
-            detection_model: Some(fake_detection_model()),
+        let engine = OcrEngine::new_impl(OcrEngineParamsImpl {
+            detection_model: Some(FakeDetectionModel {}),
             recognition_model: None,
             ..Default::default()
         })?;
@@ -479,11 +499,10 @@ mod tests {
     // the first row produces " ", the second row "0" and so on, using the
     // default alphabet.
     fn test_recognition(
-        params: OcrEngineParams,
+        engine: OcrEngine,
         image: NdTensorView<f32, 3>,
         expected_text: &str,
     ) -> Result<(), Box<dyn Error>> {
-        let engine = OcrEngine::new(params)?;
         let input = engine.prepare_input(ImageSource::from_tensor(image.view(), DimOrder::Chw)?)?;
 
         // Create a dummy input line with a single word which fills the image.
@@ -512,17 +531,14 @@ mod tests {
         // leave all other characters with a probability of zero.
         image.slice_mut((.., 2, ..)).fill(1.);
 
-        let (rec_model, alphabet) = fake_recognition_model();
-        test_recognition(
-            OcrEngineParams {
-                detection_model: None,
-                recognition_model: Some(rec_model),
-                alphabet: Some(alphabet),
-                ..Default::default()
-            },
-            image.view(),
-            "0",
-        )?;
+        let rec_model = FakeRecognitionModel {};
+        let engine = OcrEngine::new_impl(OcrEngineParamsImpl {
+            detection_model: None,
+            recognition_model: Some(rec_model),
+            alphabet: Some(make_alphabet()),
+            ..Default::default()
+        })?;
+        test_recognition(engine, image.view(), "0")?;
 
         Ok(())
     }
@@ -535,31 +551,27 @@ mod tests {
         image.slice_mut((.., 2, ..)).fill(0.7);
         image.slice_mut((.., 3, ..)).fill(0.3);
 
-        let (rec_model, alphabet) = fake_recognition_model();
-        test_recognition(
-            OcrEngineParams {
-                detection_model: None,
-                recognition_model: Some(rec_model),
-                alphabet: Some(alphabet),
-                ..Default::default()
-            },
-            image.view(),
-            "0",
-        )?;
+        let alphabet = make_alphabet();
+
+        let rec_model = FakeRecognitionModel {};
+        let engine = OcrEngine::new_impl(OcrEngineParamsImpl {
+            detection_model: None,
+            recognition_model: Some(rec_model),
+            alphabet: Some(alphabet.clone()),
+            ..Default::default()
+        })?;
+        test_recognition(engine, image.view(), "0")?;
 
         // Run recognition again but exclude "0" from the output.
-        let (rec_model, alphabet) = fake_recognition_model();
-        test_recognition(
-            OcrEngineParams {
-                detection_model: None,
-                recognition_model: Some(rec_model),
-                alphabet: Some(alphabet),
-                allowed_chars: Some("123456789".into()),
-                ..Default::default()
-            },
-            image.view(),
-            "1",
-        )?;
+        let rec_model = FakeRecognitionModel {};
+        let engine = OcrEngine::new_impl(OcrEngineParamsImpl {
+            detection_model: None,
+            recognition_model: Some(rec_model),
+            alphabet: Some(alphabet),
+            allowed_chars: Some("123456789".into()),
+            ..Default::default()
+        })?;
+        test_recognition(engine, image.view(), "1")?;
 
         Ok(())
     }
