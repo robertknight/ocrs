@@ -172,18 +172,9 @@ impl TextDetector {
 
         // Run text detection model to compute a probability mask indicating whether
         // each pixel is part of a text word or not.
-        let text_mask: Tensor<f32> = self.model.run(
-            image.view(),
-            if debug {
-                Some(RunOptions {
-                    timing: true,
-                    verbose: false,
-                    ..Default::default()
-                })
-            } else {
-                None
-            },
-        )?;
+        let mut opts = RunOptions::default();
+        opts.timing = debug;
+        let text_mask: Tensor<f32> = self.model.run(image.view(), Some(opts))?;
 
         // Resize probability mask to original input size and apply threshold to get a
         // binary text/not-text mask.
