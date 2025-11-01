@@ -22,7 +22,7 @@ anyhow = "1.0.99"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ureq = "3.1.2"
-home = "0.5.11"
+home = "0.5.12"
 
 [[bin]]
 name = "ocrs"
