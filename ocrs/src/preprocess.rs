@@ -172,46 +172,75 @@ fn prepare_image_impl<const CHANS_LAST: bool>(pixels: ImagePixels) -> NdTensor<f
 
     match pixels {
         ImagePixels::Floats(floats) => match src_chans {
-            Channels::Grey => convert_pixels::<_, _, CHANS_LAST>(floats.view(), [1.]),
-            Channels::Rgb | Channels::Rgba => {
-                convert_pixels::<_, _, CHANS_LAST>(floats.view(), ITU_WEIGHTS)
-            }
+            Channels::Grey => convert_pixels::<_, 1, _, CHANS_LAST>(floats.view(), [1.]),
+            Channels::Rgb => convert_pixels::<_, 3, _, CHANS_LAST>(floats.view(), ITU_WEIGHTS),
+            Channels::Rgba => convert_pixels::<_, 4, _, CHANS_LAST>(floats.view(), ITU_WEIGHTS),
         },
-        ImagePixels::Bytes(bytes) => match src_chans {
-            Channels::Grey => convert_pixels::<_, _, CHANS_LAST>(bytes.view(), [1. / 255.]),
-            Channels::Rgb | Channels::Rgba => {
-                // Combine the byte -> float scaling and color components into
-                // a single weight.
-                let weights = ITU_WEIGHTS.map(|w| w / 255.0);
-                convert_pixels::<_, _, CHANS_LAST>(bytes.view(), weights)
+        ImagePixels::Bytes(bytes) => {
+            // Combine the byte -> float scaling and color components into
+            // a single weight.
+            let weights = ITU_WEIGHTS.map(|w| w / 255.0);
+            match src_chans {
+                Channels::Grey => convert_pixels::<_, 1, _, CHANS_LAST>(bytes.view(), [1. / 255.]),
+                Channels::Rgb => convert_pixels::<_, 3, _, CHANS_LAST>(bytes.view(), weights),
+                Channels::Rgba => convert_pixels::<_, 4, _, CHANS_LAST>(bytes.view(), weights),
             }
-        },
+        }
     }
 }
 
 /// Convert pixels in an image to floats and scale by the given channel weights.
 ///
+/// `PIXEL_STRIDE` is the number of elements per pixel in the input: 1 for grey,
+/// 3 for RGB or 4 for RGBA. `CHANS` is the number of color channels used from
+/// the input (1 for grey, 3 for RGB or RGBA). `CHANS_LAST` specifies the
+/// input has (height, width, chans) if true, or (chans, height, width)
+/// if false.
+///
 /// Returns a (1, H, W) tensor.
-fn convert_pixels<T: AsF32, const N: usize, const CHANS_LAST: bool>(
+fn convert_pixels<
+    T: AsF32,
+    const PIXEL_STRIDE: usize,
+    const CHANS: usize,
+    const CHANS_LAST: bool,
+>(
     src: NdTensorView<T, 3>,
-    chan_weights: [f32; N],
+    chan_weights: [f32; CHANS],
 ) -> NdTensor<f32, 3> {
-    let height = if CHANS_LAST { src.size(0) } else { src.size(1) };
-    let width = if CHANS_LAST { src.size(1) } else { src.size(2) };
-
+    let [height, width, chans] = if CHANS_LAST {
+        src.shape()
+    } else {
+        let [c, h, w] = src.shape();
+        [h, w, c]
+    };
+    assert_eq!(chans, PIXEL_STRIDE);
     let mut grey_img = NdTensor::uninit([height, width]);
-    for y in 0..height {
-        for x in 0..width {
+
+    if CHANS_LAST {
+        // For channels-last input, we can load the input in contiguous
+        // autovectorization-friendly chunks.
+
+        // We assume the input is likely contiguous, so this should be cheap.
+        let src = src.to_contiguous();
+        let (src_pixels, remainder) = src.data().unwrap().as_chunks::<PIXEL_STRIDE>();
+        debug_assert!(remainder.is_empty());
+
+        for (in_pixel, out_pixel) in src_pixels.iter().zip(grey_img.data_mut().unwrap()) {
             let mut pixel = BLACK_VALUE;
             for c in 0..chan_weights.len() {
-                let src_elem = if CHANS_LAST {
-                    src[[y, x, c]].as_f32()
-                } else {
-                    src[[c, y, x]].as_f32()
-                };
-                pixel += src_elem * chan_weights[c]
+                pixel += in_pixel[c].as_f32() * chan_weights[c]
             }
-            grey_img[[y, x]].write(pixel);
+            out_pixel.write(pixel);
+        }
+    } else {
+        for y in 0..height {
+            for x in 0..width {
+                let mut pixel = BLACK_VALUE;
+                for c in 0..chan_weights.len() {
+                    pixel += src[[c, y, x]].as_f32() * chan_weights[c]
+                }
+                grey_img[[y, x]].write(pixel);
+            }
         }
     }
 
