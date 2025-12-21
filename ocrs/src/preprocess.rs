@@ -32,14 +32,6 @@ impl ImagePixels<'_> {
             ImagePixels::Bytes(b) => b.shape(),
         }
     }
-
-    /// Return the pixel value at an index as a value in [0, 1].
-    fn pixel_as_f32(&self, index: [usize; 3]) -> f32 {
-        match self {
-            ImagePixels::Floats(f) => f[index],
-            ImagePixels::Bytes(b) => b[index] as f32 / 255.,
-        }
-    }
 }
 
 /// Errors that can occur when creating an [ImageSource].
@@ -129,31 +121,18 @@ impl<'a> ImageSource<'a> {
             _ => Err(ImageSourceError::UnsupportedChannelCount),
         }
     }
-
-    /// Return the shape of the image as a `[channels, height, width]` array.
-    pub(crate) fn shape(&self) -> [usize; 3] {
-        let shape = self.data.shape();
-
-        match self.order {
-            DimOrder::Chw => shape,
-            DimOrder::Hwc => [shape[2], shape[0], shape[1]],
-        }
-    }
-
-    /// Return the pixel from a given channel and spatial coordinate, as a
-    /// float in [0, 1].
-    pub(crate) fn get_pixel(&self, channel: usize, y: usize, x: usize) -> f32 {
-        let index = match self.order {
-            DimOrder::Chw => [channel, y, x],
-            DimOrder::Hwc => [y, x, channel],
-        };
-        self.data.pixel_as_f32(index)
-    }
 }
 
 /// The value used to represent fully black pixels in OCR input images
 /// prepared by [prepare_image].
 pub const BLACK_VALUE: f32 = -0.5;
+
+/// Specifies the number and order of color channels in an image.
+enum Channels {
+    Grey,
+    Rgb,
+    Rgba,
+}
 
 /// Prepare an image for use with text detection and recognition models.
 ///
@@ -168,35 +147,122 @@ pub const BLACK_VALUE: f32 = -0.5;
 /// ImageReadMode.GRAY)`, which is used when training models with greyscale
 /// inputs. torchvision internally uses libpng's `png_set_rgb_to_gray`.
 pub fn prepare_image(img: ImageSource) -> NdTensor<f32, 3> {
-    let [chans, height, width] = img.shape();
-    assert!(
-        matches!(chans, 1 | 3 | 4),
-        "expected greyscale, RGB or RGBA input image"
-    );
+    match img.order {
+        DimOrder::Hwc => prepare_image_impl::<true>(img.data),
+        DimOrder::Chw => prepare_image_impl::<false>(img.data),
+    }
+}
 
-    let used_chans = chans.min(3); // For RGBA images, only RGB channels are used
-    let chan_weights: &[f32] = if chans == 1 {
-        &[1.]
+fn prepare_image_impl<const CHANS_LAST: bool>(pixels: ImagePixels) -> NdTensor<f32, 3> {
+    let n_chans = if CHANS_LAST {
+        pixels.shape()[2]
     } else {
-        // ITU BT.601 weights for RGB => luminance conversion. These match what
-        // torchvision uses. See also https://stackoverflow.com/a/596241/434243.
-        &[0.299, 0.587, 0.114]
+        pixels.shape()[0]
+    };
+    let src_chans = match n_chans {
+        1 => Channels::Grey,
+        3 => Channels::Rgb,
+        4 => Channels::Rgba,
+        _ => panic!("expected greyscale, RGB or RGBA input image"),
     };
 
-    // Ideally we would use `NdTensor::from_fn` here, but explicit loops are
-    // currently faster.
-    let mut grey_img = NdTensor::uninit([height, width]);
-    for y in 0..height {
-        for x in 0..width {
-            let mut pixel = BLACK_VALUE;
-            for (chan, weight) in (0..used_chans).zip(chan_weights) {
-                pixel += img.get_pixel(chan, y, x) * weight
+    // ITU BT.601 weights for RGB => luminance conversion. These match what
+    // torchvision uses. See also https://stackoverflow.com/a/596241/434243.
+    const ITU_WEIGHTS: [f32; 3] = [0.299, 0.587, 0.114];
+
+    match pixels {
+        ImagePixels::Floats(floats) => match src_chans {
+            Channels::Grey => convert_pixels::<_, 1, _, CHANS_LAST>(floats.view(), [1.]),
+            Channels::Rgb => convert_pixels::<_, 3, _, CHANS_LAST>(floats.view(), ITU_WEIGHTS),
+            Channels::Rgba => convert_pixels::<_, 4, _, CHANS_LAST>(floats.view(), ITU_WEIGHTS),
+        },
+        ImagePixels::Bytes(bytes) => {
+            // Combine the byte -> float scaling and color components into
+            // a single weight.
+            let weights = ITU_WEIGHTS.map(|w| w / 255.0);
+            match src_chans {
+                Channels::Grey => convert_pixels::<_, 1, _, CHANS_LAST>(bytes.view(), [1. / 255.]),
+                Channels::Rgb => convert_pixels::<_, 3, _, CHANS_LAST>(bytes.view(), weights),
+                Channels::Rgba => convert_pixels::<_, 4, _, CHANS_LAST>(bytes.view(), weights),
             }
-            grey_img[[y, x]].write(pixel);
         }
     }
+}
+
+/// Convert pixels in an image to floats and scale by the given channel weights.
+///
+/// `PIXEL_STRIDE` is the number of elements per pixel in the input: 1 for grey,
+/// 3 for RGB or 4 for RGBA. `CHANS` is the number of color channels used from
+/// the input (1 for grey, 3 for RGB or RGBA). `CHANS_LAST` specifies the
+/// input has (height, width, chans) if true, or (chans, height, width)
+/// if false.
+///
+/// Returns a (1, H, W) tensor.
+fn convert_pixels<
+    T: AsF32,
+    const PIXEL_STRIDE: usize,
+    const CHANS: usize,
+    const CHANS_LAST: bool,
+>(
+    src: NdTensorView<T, 3>,
+    chan_weights: [f32; CHANS],
+) -> NdTensor<f32, 3> {
+    let [height, width, chans] = if CHANS_LAST {
+        src.shape()
+    } else {
+        let [c, h, w] = src.shape();
+        [h, w, c]
+    };
+    assert_eq!(chans, PIXEL_STRIDE);
+    let mut grey_img = NdTensor::uninit([height, width]);
+
+    if CHANS_LAST {
+        // For channels-last input, we can load the input in contiguous
+        // autovectorization-friendly chunks.
+
+        // We assume the input is likely contiguous, so this should be cheap.
+        let src = src.to_contiguous();
+        let (src_pixels, remainder) = src.data().unwrap().as_chunks::<PIXEL_STRIDE>();
+        debug_assert!(remainder.is_empty());
+
+        for (in_pixel, out_pixel) in src_pixels.iter().zip(grey_img.data_mut().unwrap()) {
+            let mut pixel = BLACK_VALUE;
+            for c in 0..chan_weights.len() {
+                pixel += in_pixel[c].as_f32() * chan_weights[c]
+            }
+            out_pixel.write(pixel);
+        }
+    } else {
+        for y in 0..height {
+            for x in 0..width {
+                let mut pixel = BLACK_VALUE;
+                for c in 0..chan_weights.len() {
+                    pixel += src[[c, y, x]].as_f32() * chan_weights[c]
+                }
+                grey_img[[y, x]].write(pixel);
+            }
+        }
+    }
+
     // Safety: We initialized all the pixels.
     unsafe { grey_img.assume_init().into_shape([1, height, width]) }
+}
+
+/// Convert a primitive to a float using the `as` operator.
+trait AsF32: Copy {
+    fn as_f32(self) -> f32;
+}
+
+impl AsF32 for f32 {
+    fn as_f32(self) -> f32 {
+        self
+    }
+}
+
+impl AsF32 for u8 {
+    fn as_f32(self) -> f32 {
+        self as f32
+    }
 }
 
 #[cfg(test)]
@@ -204,7 +270,7 @@ mod tests {
     use rten_tensor::prelude::*;
     use rten_tensor::NdTensor;
 
-    use super::{DimOrder, ImageSource, ImageSourceError};
+    use super::{prepare_image, DimOrder, ImageSource, ImageSourceError, BLACK_VALUE};
 
     #[test]
     fn test_image_source_from_bytes() {
@@ -252,15 +318,6 @@ mod tests {
             let data: Vec<u8> = (0u8..len as u8).collect();
             let source = ImageSource::from_bytes(&data, (width, height));
             assert_eq!(source.as_ref().err(), error.as_ref());
-
-            if let Ok(source) = source {
-                let channels = len as usize / (width * height) as usize;
-                let tensor =
-                    NdTensor::from_data([height as usize, width as usize, channels], data.clone());
-
-                assert_eq!(source.shape(), tensor.permuted([2, 0, 1]).shape());
-                assert_eq!(source.get_pixel(0, 2, 3), tensor[[2, 3, 0]] as f32 / 255.,);
-            }
         }
     }
 
@@ -300,23 +357,240 @@ mod tests {
             let tensor = NdTensor::<u8, 1>::arange(0, len as u8, None).into_shape(shape);
             let source = ImageSource::from_tensor(tensor.view(), order);
             assert_eq!(source.as_ref().err(), error.as_ref());
+        }
+    }
 
-            if let Ok(source) = source {
-                assert_eq!(
-                    source.shape(),
-                    match order {
-                        DimOrder::Chw => tensor.shape(),
-                        DimOrder::Hwc => tensor.permuted([2, 0, 1]).shape(),
-                    }
-                );
-                assert_eq!(
-                    source.get_pixel(0, 2, 3),
-                    match order {
-                        DimOrder::Chw => tensor[[0, 2, 3]] as f32 / 255.,
-                        DimOrder::Hwc => tensor[[2, 3, 0]] as f32 / 255.,
-                    }
-                );
-            }
+    /// ITU BT.601 weights for RGB => luminance conversion.
+    const ITU_WEIGHTS: [f32; 3] = [0.299, 0.587, 0.114];
+
+    /// Helper to compute expected greyscale value from RGB.
+    fn expected_grey_from_rgb(r: f32, g: f32, b: f32) -> f32 {
+        BLACK_VALUE + r * ITU_WEIGHTS[0] + g * ITU_WEIGHTS[1] + b * ITU_WEIGHTS[2]
+    }
+
+    #[track_caller]
+    fn assert_close(actual: f32, expected: f32) {
+        assert!(
+            (actual - expected).abs() < 1e-5,
+            "expected {expected}, got {actual}"
+        );
+    }
+
+    #[test]
+    fn test_prepare_image_greyscale_u8() {
+        struct Case {
+            shape: [usize; 3],
+            order: DimOrder,
+        }
+
+        let cases = [
+            Case {
+                shape: [2, 2, 1],
+                order: DimOrder::Hwc,
+            },
+            Case {
+                shape: [1, 2, 2],
+                order: DimOrder::Chw,
+            },
+        ];
+
+        for Case { shape, order } in cases {
+            let data: Vec<u8> = vec![0, 128, 255, 64];
+            let tensor = NdTensor::from_data(shape, data);
+            let source = ImageSource::from_tensor(tensor.view(), order).unwrap();
+
+            let result = prepare_image(source);
+
+            assert_eq!(result.shape(), [1, 2, 2]);
+            assert_close(result[[0, 0, 0]], BLACK_VALUE + 0.0);
+            assert_close(result[[0, 0, 1]], BLACK_VALUE + 128.0 / 255.0);
+            assert_close(result[[0, 1, 0]], BLACK_VALUE + 1.0);
+            assert_close(result[[0, 1, 1]], BLACK_VALUE + 64.0 / 255.0);
+        }
+    }
+
+    #[test]
+    fn test_prepare_image_greyscale_f32() {
+        struct Case {
+            shape: [usize; 3],
+            order: DimOrder,
+        }
+
+        let cases = [
+            Case {
+                shape: [2, 2, 1],
+                order: DimOrder::Hwc,
+            },
+            Case {
+                shape: [1, 2, 2],
+                order: DimOrder::Chw,
+            },
+        ];
+
+        for Case { shape, order } in cases {
+            let data: Vec<f32> = vec![0.0, 0.5, 1.0, 0.25];
+            let tensor = NdTensor::from_data(shape, data);
+            let source = ImageSource::from_tensor(tensor.view(), order).unwrap();
+
+            let result = prepare_image(source);
+
+            assert_eq!(result.shape(), [1, 2, 2]);
+            assert_close(result[[0, 0, 0]], BLACK_VALUE + 0.0);
+            assert_close(result[[0, 0, 1]], BLACK_VALUE + 0.5);
+            assert_close(result[[0, 1, 0]], BLACK_VALUE + 1.0);
+            assert_close(result[[0, 1, 1]], BLACK_VALUE + 0.25);
+        }
+    }
+
+    #[test]
+    fn test_prepare_image_rgb_rgba_u8() {
+        struct Case {
+            data: Vec<u8>,
+            shape: [usize; 3],
+            order: DimOrder,
+            rgb: [u8; 3],
+        }
+
+        let cases = [
+            // RGB HWC
+            Case {
+                data: vec![100, 150, 200],
+                shape: [1, 1, 3],
+                order: DimOrder::Hwc,
+                rgb: [100, 150, 200],
+            },
+            // RGB CHW
+            Case {
+                data: vec![100, 150, 200],
+                shape: [3, 1, 1],
+                order: DimOrder::Chw,
+                rgb: [100, 150, 200],
+            },
+            // RGBA HWC (alpha should be ignored)
+            Case {
+                data: vec![50, 100, 150, 255],
+                shape: [1, 1, 4],
+                order: DimOrder::Hwc,
+                rgb: [50, 100, 150],
+            },
+            // RGBA CHW
+            Case {
+                data: vec![50, 100, 150, 255],
+                shape: [4, 1, 1],
+                order: DimOrder::Chw,
+                rgb: [50, 100, 150],
+            },
+        ];
+
+        for Case {
+            data,
+            shape,
+            order,
+            rgb: [r, g, b],
+        } in cases
+        {
+            let tensor = NdTensor::from_data(shape, data);
+            let source = ImageSource::from_tensor(tensor.view(), order).unwrap();
+
+            let result = prepare_image(source);
+
+            assert_eq!(result.shape(), [1, 1, 1]);
+            let expected =
+                expected_grey_from_rgb(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0);
+            assert_close(result[[0, 0, 0]], expected);
+        }
+    }
+
+    #[test]
+    fn test_prepare_image_rgb_f32() {
+        struct Case {
+            shape: [usize; 3],
+            order: DimOrder,
+        }
+
+        let cases = [
+            Case {
+                shape: [1, 1, 3],
+                order: DimOrder::Hwc,
+            },
+            Case {
+                shape: [3, 1, 1],
+                order: DimOrder::Chw,
+            },
+        ];
+
+        let (r, g, b) = (0.4, 0.6, 0.8);
+
+        for Case { shape, order } in cases {
+            let data: Vec<f32> = vec![r, g, b];
+            let tensor = NdTensor::from_data(shape, data);
+            let source = ImageSource::from_tensor(tensor.view(), order).unwrap();
+
+            let result = prepare_image(source);
+
+            assert_eq!(result.shape(), [1, 1, 1]);
+            let expected = expected_grey_from_rgb(r, g, b);
+            assert_close(result[[0, 0, 0]], expected);
+        }
+    }
+
+    #[test]
+    fn test_prepare_image_multi_pixel_rgb() {
+        // Test both HWC and CHW with a 2x2 image to verify iteration order
+        struct Case {
+            data: Vec<u8>,
+            shape: [usize; 3],
+            order: DimOrder,
+        }
+
+        let cases = [
+            // HWC layout
+            Case {
+                #[rustfmt::skip]
+                data: vec![
+                    255, 0, 0,    // (0,0) red
+                    0, 255, 0,    // (0,1) green
+                    0, 0, 255,    // (1,0) blue
+                    128, 128, 128 // (1,1) grey
+                ],
+                shape: [2, 2, 3],
+                order: DimOrder::Hwc,
+            },
+            // CHW layout (same image, different memory layout)
+            Case {
+                #[rustfmt::skip]
+                data: vec![
+                    // R channel
+                    255, 0,
+                    0, 128,
+                    // G channel
+                    0, 255,
+                    0, 128,
+                    // B channel
+                    0, 0,
+                    255, 128,
+                ],
+                shape: [3, 2, 2],
+                order: DimOrder::Chw,
+            },
+        ];
+
+        let expected_red = expected_grey_from_rgb(1.0, 0.0, 0.0);
+        let expected_green = expected_grey_from_rgb(0.0, 1.0, 0.0);
+        let expected_blue = expected_grey_from_rgb(0.0, 0.0, 1.0);
+        let expected_grey = expected_grey_from_rgb(128.0 / 255.0, 128.0 / 255.0, 128.0 / 255.0);
+
+        for Case { data, shape, order } in cases {
+            let tensor = NdTensor::from_data(shape, data);
+            let source = ImageSource::from_tensor(tensor.view(), order).unwrap();
+
+            let result = prepare_image(source);
+
+            assert_eq!(result.shape(), [1, 2, 2]);
+            assert_close(result[[0, 0, 0]], expected_red);
+            assert_close(result[[0, 0, 1]], expected_green);
+            assert_close(result[[0, 1, 0]], expected_blue);
+            assert_close(result[[0, 1, 1]], expected_grey);
         }
     }
 }
