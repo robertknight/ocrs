@@ -64,7 +64,7 @@ fn find_connected_component_rects(
 /// Text detector which finds the oriented bounding boxes of words in an input
 /// image.
 pub struct TextDetector {
-    model: Box<dyn Model>,
+    model: Box<dyn Model + Send + Sync>,
     params: TextDetectorParams,
     input_shape: Vec<Dimension>,
 }
@@ -74,7 +74,7 @@ impl TextDetector {
     ///
     /// This will fail if the model doesn't have the expected inputs or outputs.
     pub fn from_model(
-        model: impl Model + 'static,
+        model: impl Model + Send + Sync + 'static,
         params: TextDetectorParams,
     ) -> anyhow::Result<TextDetector> {
         let input_shape = model.input_shape()?;
