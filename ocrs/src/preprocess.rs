@@ -32,14 +32,6 @@ impl ImagePixels<'_> {
             ImagePixels::Bytes(b) => b.shape(),
         }
     }
-
-    /// Return the pixel value at an index as a value in [0, 1].
-    fn pixel_as_f32(&self, index: [usize; 3]) -> f32 {
-        match self {
-            ImagePixels::Floats(f) => f[index],
-            ImagePixels::Bytes(b) => b[index] as f32 / 255.,
-        }
-    }
 }
 
 /// Errors that can occur when creating an [ImageSource].
@@ -129,31 +121,18 @@ impl<'a> ImageSource<'a> {
             _ => Err(ImageSourceError::UnsupportedChannelCount),
         }
     }
-
-    /// Return the shape of the image as a `[channels, height, width]` array.
-    pub(crate) fn shape(&self) -> [usize; 3] {
-        let shape = self.data.shape();
-
-        match self.order {
-            DimOrder::Chw => shape,
-            DimOrder::Hwc => [shape[2], shape[0], shape[1]],
-        }
-    }
-
-    /// Return the pixel from a given channel and spatial coordinate, as a
-    /// float in [0, 1].
-    pub(crate) fn get_pixel(&self, channel: usize, y: usize, x: usize) -> f32 {
-        let index = match self.order {
-            DimOrder::Chw => [channel, y, x],
-            DimOrder::Hwc => [y, x, channel],
-        };
-        self.data.pixel_as_f32(index)
-    }
 }
 
 /// The value used to represent fully black pixels in OCR input images
 /// prepared by [prepare_image].
 pub const BLACK_VALUE: f32 = -0.5;
+
+/// Specifies the number and order of color channels in an image.
+enum Channels {
+    Grey,
+    Rgb,
+    Rgba,
+}
 
 /// Prepare an image for use with text detection and recognition models.
 ///
@@ -168,35 +147,93 @@ pub const BLACK_VALUE: f32 = -0.5;
 /// ImageReadMode.GRAY)`, which is used when training models with greyscale
 /// inputs. torchvision internally uses libpng's `png_set_rgb_to_gray`.
 pub fn prepare_image(img: ImageSource) -> NdTensor<f32, 3> {
-    let [chans, height, width] = img.shape();
-    assert!(
-        matches!(chans, 1 | 3 | 4),
-        "expected greyscale, RGB or RGBA input image"
-    );
+    match img.order {
+        DimOrder::Hwc => prepare_image_impl::<true>(img.data),
+        DimOrder::Chw => prepare_image_impl::<false>(img.data),
+    }
+}
 
-    let used_chans = chans.min(3); // For RGBA images, only RGB channels are used
-    let chan_weights: &[f32] = if chans == 1 {
-        &[1.]
+fn prepare_image_impl<const CHANS_LAST: bool>(pixels: ImagePixels) -> NdTensor<f32, 3> {
+    let n_chans = if CHANS_LAST {
+        pixels.shape()[2]
     } else {
-        // ITU BT.601 weights for RGB => luminance conversion. These match what
-        // torchvision uses. See also https://stackoverflow.com/a/596241/434243.
-        &[0.299, 0.587, 0.114]
+        pixels.shape()[0]
+    };
+    let src_chans = match n_chans {
+        1 => Channels::Grey,
+        3 => Channels::Rgb,
+        4 => Channels::Rgba,
+        _ => panic!("expected greyscale, RGB or RGBA input image"),
     };
 
-    // Ideally we would use `NdTensor::from_fn` here, but explicit loops are
-    // currently faster.
+    // ITU BT.601 weights for RGB => luminance conversion. These match what
+    // torchvision uses. See also https://stackoverflow.com/a/596241/434243.
+    const ITU_WEIGHTS: [f32; 3] = [0.299, 0.587, 0.114];
+
+    match pixels {
+        ImagePixels::Floats(floats) => match src_chans {
+            Channels::Grey => convert_pixels::<_, _, CHANS_LAST>(floats.view(), [1.]),
+            Channels::Rgb | Channels::Rgba => {
+                convert_pixels::<_, _, CHANS_LAST>(floats.view(), ITU_WEIGHTS)
+            }
+        },
+        ImagePixels::Bytes(bytes) => match src_chans {
+            Channels::Grey => convert_pixels::<_, _, CHANS_LAST>(bytes.view(), [1. / 255.]),
+            Channels::Rgb | Channels::Rgba => {
+                // Combine the byte -> float scaling and color components into
+                // a single weight.
+                let weights = ITU_WEIGHTS.map(|w| w / 255.0);
+                convert_pixels::<_, _, CHANS_LAST>(bytes.view(), weights)
+            }
+        },
+    }
+}
+
+/// Convert pixels in an image to floats and scale by the given channel weights.
+///
+/// Returns a (1, H, W) tensor.
+fn convert_pixels<T: AsF32, const N: usize, const CHANS_LAST: bool>(
+    src: NdTensorView<T, 3>,
+    chan_weights: [f32; N],
+) -> NdTensor<f32, 3> {
+    let height = if CHANS_LAST { src.size(0) } else { src.size(1) };
+    let width = if CHANS_LAST { src.size(1) } else { src.size(2) };
+
     let mut grey_img = NdTensor::uninit([height, width]);
     for y in 0..height {
         for x in 0..width {
             let mut pixel = BLACK_VALUE;
-            for (chan, weight) in (0..used_chans).zip(chan_weights) {
-                pixel += img.get_pixel(chan, y, x) * weight
+            for c in 0..chan_weights.len() {
+                let src_elem = if CHANS_LAST {
+                    src[[y, x, c]].as_f32()
+                } else {
+                    src[[c, y, x]].as_f32()
+                };
+                pixel += src_elem * chan_weights[c]
             }
             grey_img[[y, x]].write(pixel);
         }
     }
+
     // Safety: We initialized all the pixels.
     unsafe { grey_img.assume_init().into_shape([1, height, width]) }
+}
+
+/// Convert a primitive to a float using the `as` operator.
+trait AsF32: Copy {
+    fn as_f32(self) -> f32;
+}
+
+impl AsF32 for f32 {
+    fn as_f32(self) -> f32 {
+        self
+    }
+}
+
+impl AsF32 for u8 {
+    fn as_f32(self) -> f32 {
+        self as f32
+    }
 }
 
 #[cfg(test)]
@@ -252,15 +289,6 @@ mod tests {
             let data: Vec<u8> = (0u8..len as u8).collect();
             let source = ImageSource::from_bytes(&data, (width, height));
             assert_eq!(source.as_ref().err(), error.as_ref());
-
-            if let Ok(source) = source {
-                let channels = len as usize / (width * height) as usize;
-                let tensor =
-                    NdTensor::from_data([height as usize, width as usize, channels], data.clone());
-
-                assert_eq!(source.shape(), tensor.permuted([2, 0, 1]).shape());
-                assert_eq!(source.get_pixel(0, 2, 3), tensor[[2, 3, 0]] as f32 / 255.,);
-            }
         }
     }
 
@@ -300,23 +328,6 @@ mod tests {
             let tensor = NdTensor::<u8, 1>::arange(0, len as u8, None).into_shape(shape);
             let source = ImageSource::from_tensor(tensor.view(), order);
             assert_eq!(source.as_ref().err(), error.as_ref());
-
-            if let Ok(source) = source {
-                assert_eq!(
-                    source.shape(),
-                    match order {
-                        DimOrder::Chw => tensor.shape(),
-                        DimOrder::Hwc => tensor.permuted([2, 0, 1]).shape(),
-                    }
-                );
-                assert_eq!(
-                    source.get_pixel(0, 2, 3),
-                    match order {
-                        DimOrder::Chw => tensor[[0, 2, 3]] as f32 / 255.,
-                        DimOrder::Hwc => tensor[[2, 3, 0]] as f32 / 255.,
-                    }
-                );
-            }
         }
     }
 }
