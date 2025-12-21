@@ -7,7 +7,7 @@ use anyhow::{anyhow, Context};
 use ocrs::{DecodeMethod, DimOrder, ImageSource, OcrEngine, OcrEngineParams, OcrInput};
 use rten_imageproc::RotatedRect;
 use rten_tensor::prelude::*;
-use rten_tensor::{NdTensor, NdTensorView};
+use rten_tensor::{MutLayout, NdLayout, NdTensor, NdTensorView};
 
 mod models;
 use models::{load_model, ModelSource};
@@ -316,21 +316,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     })?;
 
     // Read image into HWC tensor.
-    let color_img: NdTensor<u8, 3> = image::open(&args.image)
-        .map(|image| {
-            let image = image.into_rgb8();
-            let (width, height) = image.dimensions();
-            let in_chans = 3;
-            NdTensor::from_data(
-                [height as usize, width as usize, in_chans],
-                image.into_vec(),
-            )
-        })
-        .with_context(|| format!("Failed to read image from {}", &args.image))?;
+    // let color_img: NdTensor<u8, 3> = image::open(&args.image)
+    //     .map(|image| {
+    //         let image = image.into_rgb8();
+    //         let (width, height) = image.dimensions();
+    //         let in_chans = 3;
+    //         NdTensor::from_data(
+    //             [height as usize, width as usize, in_chans],
+    //             image.into_vec(),
+    //         )
+    //     })
+    //     .with_context(|| format!("Failed to read image from {}", &args.image))?;
+    let color_img = image::open(&args.image)?.into_rgba8();
 
     // Preprocess image for use with OCR engine.
-    let color_img_source = ImageSource::from_tensor(color_img.view(), DimOrder::Hwc)?;
-    let ocr_input = engine.prepare_input(color_img_source)?;
+    // let color_img_source = ImageSource::from_tensor(color_img, DimOrder::Hwc)?;
+    // let ocr_input = engine.prepare_input(color_img_source)?;
+    let ocr_input = prepare_img(color_img);
 
     if args.text_map || args.text_mask {
         let text_map = engine.detect_text_pixels(&ocr_input)?;
@@ -373,37 +375,74 @@ fn main() -> Result<(), Box<dyn Error>> {
             write_output_str(content)?;
         }
         OutputFormat::Json => {
-            let content = format_json_output(FormatJsonArgs {
-                input_path: &args.image,
-                input_hw: color_img.shape()[1..].try_into()?,
-                text_lines: &line_texts,
-            });
-            write_output_str(content)?;
+            // let content = format_json_output(FormatJsonArgs {
+            //     input_path: &args.image,
+            //     input_hw: color_img.shape()[1..].try_into()?,
+            //     text_lines: &line_texts,
+            // });
+            // write_output_str(content)?;
         }
         OutputFormat::Png => {
-            let png_args = GeneratePngArgs {
-                img: color_img.view(),
-                line_rects: &line_rects,
-                text_lines: &line_texts,
-            };
-            let annotated_img = generate_annotated_png(png_args);
-            let Some(output_path) = args.output_path else {
-                return Err("Output path must be specified when generating annotated PNG".into());
-            };
-            write_image(&output_path, annotated_img.view())
-                .with_context(|| format!("Failed to write output to {}", &output_path))?;
+            // let png_args = GeneratePngArgs {
+            //     img: color_img.view(),
+            //     line_rects: &line_rects,
+            //     text_lines: &line_texts,
+            // };
+            // let annotated_img = generate_annotated_png(png_args);
+            // let Some(output_path) = args.output_path else {
+            //     return Err("Output path must be specified when generating annotated PNG".into());
+            // };
+            // write_image(&output_path, annotated_img.view())
+            //     .with_context(|| format!("Failed to write output to {}", &output_path))?;
         }
     }
 
-    if args.debug {
-        println!(
-            "Found {} words, {} lines in image of size {}x{}",
-            word_rects.len(),
-            line_rects.len(),
-            color_img.size(2),
-            color_img.size(1),
-        );
-    }
+    // if args.debug {
+    //     println!(
+    //         "Found {} words, {} lines in image of size {}x{}",
+    //         word_rects.len(),
+    //         line_rects.len(),
+    //         color_img.size(2),
+    //         color_img.size(1),
+    //     );
+    // }
 
     Ok(())
+}
+
+#[inline(never)]
+fn prepare_img(img: image::ImageBuffer<image::Rgba<u8>, Vec<u8>>) -> OcrInput {
+    let start = std::time::Instant::now();
+    pub const BLACK_VALUE: f32 = -0.5;
+
+    let (width, height) = img.dimensions();
+    let width = width as usize;
+    let height = height as usize;
+
+    const W_R: f32 = 0.299 / 255.0;
+    const W_G: f32 = 0.587 / 255.0;
+    const W_B: f32 = 0.114 / 255.0;
+
+    let raw = img.as_raw();
+    let total_pixels = height * width;
+    let mut grey_data = Vec::with_capacity(total_pixels);
+
+    for i in 0..total_pixels {
+        let rgba_idx = i * 4;
+        let r = raw[rgba_idx] as f32;
+        let g = raw[rgba_idx + 1] as f32;
+        let b = raw[rgba_idx + 2] as f32;
+
+        grey_data.push((r * W_R + g * W_G + b * W_B) + BLACK_VALUE);
+    }
+
+    let tensor =
+        NdTensor::from_storage_and_layout(grey_data, NdLayout::from_shape([height, width]))
+            .into_shape([1, height, width]);
+    let ocr_input: OcrInput = unsafe { std::mem::transmute(tensor) };
+
+    let elapsed = start.elapsed().as_secs_f32();
+    println!("prepared image in {}ms", elapsed * 1000.0);
+
+    ocr_input
 }
