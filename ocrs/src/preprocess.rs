@@ -214,7 +214,7 @@ fn convert_pixels<
         [h, w, c]
     };
     assert_eq!(chans, PIXEL_STRIDE);
-    let mut grey_img = NdTensor::uninit([height, width]);
+    let mut out_pixels = Vec::with_capacity(height * width);
 
     if CHANS_LAST {
         // For channels-last input, we can load the input in contiguous
@@ -225,27 +225,26 @@ fn convert_pixels<
         let (src_pixels, remainder) = src.data().unwrap().as_chunks::<PIXEL_STRIDE>();
         debug_assert!(remainder.is_empty());
 
-        for (in_pixel, out_pixel) in src_pixels.iter().zip(grey_img.data_mut().unwrap()) {
+        out_pixels.extend(src_pixels.iter().map(|in_pixel| {
             let mut pixel = BLACK_VALUE;
             for c in 0..chan_weights.len() {
                 pixel += in_pixel[c].as_f32() * chan_weights[c]
             }
-            out_pixel.write(pixel);
-        }
+            pixel
+        }));
     } else {
         for y in 0..height {
-            for x in 0..width {
+            out_pixels.extend((0..width).map(|x| {
                 let mut pixel = BLACK_VALUE;
                 for c in 0..chan_weights.len() {
                     pixel += src[[c, y, x]].as_f32() * chan_weights[c]
                 }
-                grey_img[[y, x]].write(pixel);
-            }
+                pixel
+            }));
         }
     }
 
-    // Safety: We initialized all the pixels.
-    unsafe { grey_img.assume_init().into_shape([1, height, width]) }
+    NdTensor::from_data([1, height, width], out_pixels)
 }
 
 /// Convert a primitive to a float using the `as` operator.

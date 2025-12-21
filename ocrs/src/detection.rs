@@ -172,8 +172,15 @@ impl TextDetector {
 
         // Run text detection model to compute a probability mask indicating whether
         // each pixel is part of a text word or not.
-        let mut opts = RunOptions::default();
-        opts.timing = debug;
+
+        // nb. RunOptions will be non_exhaustive in future.
+        #[allow(clippy::field_reassign_with_default)]
+        let opts = {
+            let mut opts = RunOptions::default();
+            opts.timing = debug;
+            opts
+        };
+
         let text_mask: Tensor<f32> = self.model.run(image.view(), Some(opts))?;
 
         // Resize probability mask to original input size and apply threshold to get a
