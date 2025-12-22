@@ -222,7 +222,7 @@ fn convert_pixels<
 
         // We assume the input is likely contiguous, so this should be cheap.
         let src = src.to_contiguous();
-        let (src_pixels, remainder) = src.data().unwrap().as_chunks::<PIXEL_STRIDE>();
+        let (src_pixels, remainder) = src.data().unwrap_if_needed().as_chunks::<PIXEL_STRIDE>();
         debug_assert!(remainder.is_empty());
 
         out_pixels.extend(src_pixels.iter().map(|in_pixel| {
@@ -261,6 +261,32 @@ impl AsF32 for f32 {
 impl AsF32 for u8 {
     fn as_f32(self) -> f32 {
         self as f32
+    }
+}
+
+/// Unwrap a value if contained in an [`Option`].
+///
+/// This trait exists to handle a change in the return type of
+/// [`NdTensorView::to_contiguous`] between rten-tensor v0.23 and later versions.
+trait UnwrapIfNeeded {
+    type Output;
+
+    fn unwrap_if_needed(self) -> Self::Output;
+}
+
+impl<T> UnwrapIfNeeded for &[T] {
+    type Output = Self;
+
+    fn unwrap_if_needed(self) -> Self::Output {
+        self
+    }
+}
+
+impl<T> UnwrapIfNeeded for Option<T> {
+    type Output = T;
+
+    fn unwrap_if_needed(self) -> T {
+        Self::unwrap(self)
     }
 }
 
