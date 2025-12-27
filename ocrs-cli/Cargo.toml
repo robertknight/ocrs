@@ -20,6 +20,10 @@ lexopt = "0.3.1"
 url = "2.5.4"
 anyhow = "1.0.99"
 
+[features]
+# Support loading custom models in ONNX format
+onnx = ["ocrs/onnx"]
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ureq = "3.1.2"
 home = "0.5.11"

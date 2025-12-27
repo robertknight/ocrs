@@ -27,5 +27,9 @@ image = { version = "0.25.9", default-features = false, features = ["png", "jpeg
 lexopt = "0.3.1"
 rten = { workspace = true }
 
+[features]
+# Enables loading custom models in ONNX format
+onnx = ["rten/onnx_format"]
+
 [lib]
 crate-type = ["lib", "cdylib"]
