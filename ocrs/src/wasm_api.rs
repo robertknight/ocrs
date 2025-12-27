@@ -1,7 +1,6 @@
 use wasm_bindgen::prelude::*;
 
-use rten::ops;
-use rten::{Model, ModelOptions, OpRegistry};
+use rten::{op_registry, Model, ModelOptions, OpRegistry};
 
 use rten_imageproc::{min_area_rect, BoundingRect, PointF};
 use rten_tensor::prelude::*;
@@ -32,31 +31,29 @@ impl OcrEngineInit {
     }
 
     fn op_registry() -> OpRegistry {
-        let mut reg = OpRegistry::new();
-
         // Register all the operators the OCR models currently use.
-        reg.register_op::<ops::Add>();
-        reg.register_op::<ops::AveragePool>();
-        reg.register_op::<ops::Cast>();
-        reg.register_op::<ops::Concat>();
-        reg.register_op::<ops::ConstantOfShape>();
-        reg.register_op::<ops::Conv>();
-        reg.register_op::<ops::ConvTranspose>();
-        reg.register_op::<ops::GRU>();
-        reg.register_op::<ops::Gather>();
-        reg.register_op::<ops::LogSoftmax>();
-        reg.register_op::<ops::MatMul>();
-        reg.register_op::<ops::MaxPool>();
-        reg.register_op::<ops::Pad>();
-        reg.register_op::<ops::Relu>();
-        reg.register_op::<ops::Reshape>();
-        reg.register_op::<ops::Shape>();
-        reg.register_op::<ops::Sigmoid>();
-        reg.register_op::<ops::Slice>();
-        reg.register_op::<ops::Transpose>();
-        reg.register_op::<ops::Unsqueeze>();
-
-        reg
+        op_registry!(
+            Add,
+            AveragePool,
+            Cast,
+            Concat,
+            ConstantOfShape,
+            Conv,
+            ConvTranspose,
+            GRU,
+            Gather,
+            LogSoftmax,
+            MatMul,
+            MaxPool,
+            Pad,
+            Relu,
+            Reshape,
+            Shape,
+            Sigmoid,
+            Slice,
+            Transpose,
+            Squeeze
+        )
     }
 
     /// Load a model for text detection.

@@ -456,9 +456,9 @@ dependencies = [
 
 [[package]]
 name = "rten"
-version = "0.23.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77480f7c0fdff9e506df33b90ee4e1b385c79a15646779340a3d0441a5d6c7eb"
+checksum = "43c230fa4ade87c913f61dbd911b7eb0d49460ceff3f1e4fabc837fac191137c"
 dependencies = [
  "flatbuffers",
  "num_cpus",
@@ -466,6 +466,7 @@ dependencies = [
  "rten-base",
  "rten-gemm",
  "rten-model-file",
+ "rten-shape-inference",
  "rten-simd",
  "rten-tensor",
  "rten-vecmath",
@@ -477,18 +478,18 @@ dependencies = [
 
 [[package]]
 name = "rten-base"
-version = "0.23.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fcbed7f93c6f43e50e387dbcb727e9f3d1d6f0c35fb3ac25ea79cd657616578"
+checksum = "2738cf8bb4c27f828ac788d01ccf4e367e8e773cfec6851f81851b5211de6a79"
 dependencies = [
  "rayon",
 ]
 
 [[package]]
 name = "rten-gemm"
-version = "0.23.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ee054a1d7dc8f835a75f5369651b0162db0ab966d93c59e5ea9d5bcfa37b392"
+checksum = "330a81a0ca209fb5ce21bd17efa0bd287d5881c6cebfbff0b21c4294a1a14a9e"
 dependencies = [
  "rayon",
  "rten-base",
@@ -498,34 +499,44 @@ dependencies = [
 
 [[package]]
 name = "rten-imageproc"
-version = "0.23.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a67244f1eb1fea5cf5b9ab9c543c7f5319433a5bbf74c968a2e8051f9a5e9572"
+checksum = "d5f148e7e941fb5727b9046a5fa1b45525543d5105f14b384fd9261df0ee49bc"
 dependencies = [
  "rten-tensor",
 ]
 
 [[package]]
 name = "rten-model-file"
-version = "0.23.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bdcc3ffba41d98adbc347d7a0b6b08dd03b924ed4b6bbf4680759797dba9771"
+checksum = "ed2f8d270f07ab1bbfff47250c6039f6caa5da59d6da7d74f66aa48559aa6fea"
 dependencies = [
  "flatbuffers",
  "rten-base",
 ]
 
 [[package]]
-name = "rten-simd"
-version = "0.23.0"
+name = "rten-shape-inference"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3459e4fdcb59d89d6d5fb004bdfd2a08347042cd690a3e9c22d98710a89839bd"
+checksum = "8e8a913c7ca40e2bfbb2a0cd447cce56b33ab19435f56693271a2ef37cf58984"
+dependencies = [
+ "rten-tensor",
+ "smallvec",
+]
+
+[[package]]
+name = "rten-simd"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b19a0032dfcb70dd20960c1c51a37674b237586cbc1ce586f45b46605d108e82"
 
 [[package]]
 name = "rten-tensor"
-version = "0.23.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b48ad9ca3086aa8227fe2f51094ec3cddb5b0615dcc57e6dbae1a22f887a543"
+checksum = "05dc744a270aa32d154f1a3df8e48740ccc1be9dfbcf23295ada66d83aa98de6"
 dependencies = [
  "rayon",
  "rten-base",
@@ -535,9 +546,9 @@ dependencies = [
 
 [[package]]
 name = "rten-vecmath"
-version = "0.23.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94dec3e2a336592686dadf169aeeb24d677e82a29f469b30227cc7bae335b80f"
+checksum = "9574ddebf5671bc08ceb76e2e1638fadc57fdeff318634eab2c29e9a803cff64"
 dependencies = [
  "rten-base",
  "rten-simd",
