@@ -18,7 +18,7 @@ rten-tensor = { workspace = true }
 ocrs = { path = "../ocrs", version = "0.12.0" }
 lexopt = "0.3.1"
 url = "2.5.4"
-anyhow = "1.0.99"
+anyhow = "1.0.100"
 
 [features]
 # Support loading custom models in ONNX format
