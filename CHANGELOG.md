@@ -5,10 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.12.0] - 2025-12-27
 
 - Updated to rten v0.24. This adds the ability to load custom models in
   ONNX format instead of `.rten` format (requires enabling the `onnx` crate feature)
+
+- Improved image preprocessing performance (https://github.com/robertknight/ocrs/pull/217).
+  Thanks @laundmo for initial suggestions and testing.
 
 ## [0.11.0] - 2025-09-11
 
