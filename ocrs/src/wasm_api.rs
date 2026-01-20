@@ -52,7 +52,7 @@ impl OcrEngineInit {
             Sigmoid,
             Slice,
             Transpose,
-            Squeeze
+            Unsqueeze
         )
     }
 
