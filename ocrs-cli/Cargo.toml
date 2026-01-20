@@ -23,10 +23,13 @@ anyhow = "1.0.100"
 [features]
 # Support loading custom models in ONNX format
 onnx = ["ocrs/onnx"]
+# Support reading images from system clipboard
+clipboard = ["arboard"]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ureq = "3.1.2"
 home = "0.5.12"
+arboard = { version = "3", optional = true }
 
 [[bin]]
 name = "ocrs"
