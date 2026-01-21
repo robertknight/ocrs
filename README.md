@@ -42,6 +42,13 @@ run:
 $ cargo install ocrs-cli --locked
 ```
 
+To enable support for reading images from the system clipboard, add the
+`clipboard` feature:
+
+```sh
+$ cargo install ocrs-cli --locked --features clipboard
+```
+
 ## CLI usage
 
 To extract text from an image, run:
@@ -52,6 +59,14 @@ $ ocrs image.png
 
 When the tool is run for the first time, it will download the required models
 automatically and store them in `~/.cache/ocrs`.
+
+If ocrs was installed with the `clipboard` feature, you can extract text from
+an image on the system clipboard with:
+
+```sh
+$ ocrs --clipboard
+$ ocrs -c  # Short form
+```
 
 ### Additional examples
 

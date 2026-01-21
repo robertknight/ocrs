@@ -50,6 +50,14 @@ fn image_from_tensor(tensor: NdTensorView<f32, 3>) -> Vec<u8> {
         .collect()
 }
 
+/// Source of the input image.
+enum InputSource {
+    /// Read from a file path.
+    File(String),
+    /// Read from the system clipboard.
+    Clipboard,
+}
+
 /// Extract images of individual text lines from `img`, apply the same
 /// preprocessing that would be applied before text recognition, and save
 /// in PNG format to `output_dir`.
@@ -82,8 +90,8 @@ struct Args {
     /// Path to text recognition model.
     recognition_model: Option<String>,
 
-    /// Path to image to process.
-    image: String,
+    /// Source of the input image.
+    input: InputSource,
 
     /// Enable debug output.
     debug: bool,
@@ -121,6 +129,7 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     let mut allowed_chars = None;
     let mut alphabet = None;
     let mut beam_search = false;
+    let mut clipboard = false;
     let mut debug = false;
     let mut detection_model = None;
     let mut output_format = OutputFormat::Text;
@@ -142,6 +151,9 @@ fn parse_args() -> Result<Args, lexopt::Error> {
             }
             Long("beam") => {
                 beam_search = true;
+            }
+            Short('c') | Long("clipboard") => {
+                clipboard = true;
             }
             Long("debug") => {
                 debug = true;
@@ -185,6 +197,10 @@ Options:
   -a, --alphabet <chars>
 
     Specify the alphabet used by the recognition model
+
+  -c, --clipboard
+
+    Read image from system clipboard
 
   --detect-model <path>
 
@@ -246,14 +262,27 @@ Advanced options:
         }
     }
 
+    let image = values.pop_front();
+
+    let input = match (clipboard, image) {
+        (true, Some(_)) => {
+            return Err("cannot use both --clipboard and an image path".into());
+        }
+        (true, None) => InputSource::Clipboard,
+        (false, Some(path)) => InputSource::File(path),
+        (false, None) => {
+            return Err("missing `<image>` arg (or use --clipboard)".into());
+        }
+    };
+
     Ok(Args {
         alphabet,
         beam_search,
         debug,
         detection_model,
+        input,
         output_format,
         output_path,
-        image: values.pop_front().ok_or("missing `<image>` arg")?,
         recognition_model,
         text_map,
         text_mask,
@@ -268,6 +297,52 @@ const DETECTION_MODEL: &str = "https://ocrs-models.s3-accelerate.amazonaws.com/t
 /// Default text recognition model.
 const RECOGNITION_MODEL: &str =
     "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten";
+
+/// Load an image from a file path.
+fn load_image_from_file(path: &str) -> anyhow::Result<NdTensor<u8, 3>> {
+    image::open(path)
+        .map(|image| {
+            let image = image.into_rgb8();
+            let (width, height) = image.dimensions();
+            let in_chans = 3;
+            NdTensor::from_data(
+                [height as usize, width as usize, in_chans],
+                image.into_vec(),
+            )
+        })
+        .with_context(|| format!("Failed to read image from {}", path))
+}
+
+/// Load an image from the system clipboard.
+#[cfg(feature = "clipboard")]
+fn load_image_from_clipboard() -> anyhow::Result<NdTensor<u8, 3>> {
+    use arboard::Clipboard;
+
+    let mut clipboard = Clipboard::new().context("Failed to access clipboard")?;
+
+    let image_data = clipboard
+        .get_image()
+        .context("Failed to get image from clipboard. Is there an image copied?")?;
+
+    // arboard returns RGBA, convert to RGB
+    let rgba_bytes = image_data.bytes.into_owned();
+    let rgb_bytes: Vec<u8> = rgba_bytes
+        .chunks_exact(4)
+        .flat_map(|chunk| [chunk[0], chunk[1], chunk[2]])
+        .collect();
+
+    Ok(NdTensor::from_data(
+        [image_data.height, image_data.width, 3],
+        rgb_bytes,
+    ))
+}
+
+#[cfg(not(feature = "clipboard"))]
+fn load_image_from_clipboard() -> anyhow::Result<NdTensor<u8, 3>> {
+    Err(anyhow!(
+        "ocrs was compiled without clipboard support. Use `cargo install ocrs-cli --features clipboard` to enable it."
+    ))
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = parse_args()?;
@@ -316,17 +391,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     })?;
 
     // Read image into HWC tensor.
-    let color_img: NdTensor<u8, 3> = image::open(&args.image)
-        .map(|image| {
-            let image = image.into_rgb8();
-            let (width, height) = image.dimensions();
-            let in_chans = 3;
-            NdTensor::from_data(
-                [height as usize, width as usize, in_chans],
-                image.into_vec(),
-            )
-        })
-        .with_context(|| format!("Failed to read image from {}", &args.image))?;
+    let (color_img, input_path): (NdTensor<u8, 3>, String) = match &args.input {
+        InputSource::Clipboard => (load_image_from_clipboard()?, "<clipboard>".to_string()),
+        InputSource::File(path) => (load_image_from_file(path)?, path.clone()),
+    };
 
     // Preprocess image for use with OCR engine.
     let color_img_source = ImageSource::from_tensor(color_img.view(), DimOrder::Hwc)?;
@@ -374,7 +442,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         OutputFormat::Json => {
             let content = format_json_output(FormatJsonArgs {
-                input_path: &args.image,
+                input_path: &input_path,
                 input_hw: color_img.shape()[1..].try_into()?,
                 text_lines: &line_texts,
             });
