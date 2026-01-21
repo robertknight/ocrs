@@ -27,7 +27,7 @@ onnx = ["ocrs/onnx"]
 clipboard = ["arboard"]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-ureq = "3.1.2"
+ureq = "3.1.4"
 home = "0.5.12"
 arboard = { version = "3", optional = true }
 
