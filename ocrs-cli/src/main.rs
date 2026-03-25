@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fs;
-use std::io::BufWriter;
+use std::io::{BufWriter, IsTerminal, Read};
 
 use anyhow::{anyhow, Context};
 use ocrs::{DecodeMethod, DimOrder, ImageSource, OcrEngine, OcrEngineParams, OcrInput};
@@ -54,6 +54,8 @@ fn image_from_tensor(tensor: NdTensorView<f32, 3>) -> Vec<u8> {
 enum InputSource {
     /// Read from a file path.
     File(String),
+    /// Read from stdin.
+    Stdin,
     /// Read from the system clipboard.
     Clipboard,
 }
@@ -186,7 +188,9 @@ fn parse_args() -> Result<Args, lexopt::Error> {
                 println!(
                     "Extract text from an image.
 
-Usage: {bin_name} [OPTIONS] <image>
+Usage: {bin_name} [OPTIONS] [image]
+
+  If no image path is given, reads from stdin.
 
 Options:
 
@@ -264,14 +268,20 @@ Advanced options:
 
     let image = values.pop_front();
 
-    let input = match (clipboard, image) {
-        (true, Some(_)) => {
+    let stdin_is_pipe = !std::io::stdin().is_terminal();
+
+    let input = match (clipboard, image, stdin_is_pipe) {
+        (true, Some(_), _) => {
             return Err("cannot use both --clipboard and an image path".into());
         }
-        (true, None) => InputSource::Clipboard,
-        (false, Some(path)) => InputSource::File(path),
-        (false, None) => {
-            return Err("missing `<image>` arg (or use --clipboard)".into());
+        (true, _, true) => {
+            return Err("cannot use both --clipboard and stdin".into());
+        }
+        (true, None, false) => InputSource::Clipboard,
+        (false, Some(path), _) => InputSource::File(path),
+        (false, None, true) => InputSource::Stdin,
+        (false, None, false) => {
+            return Err("missing `<image>` arg (or use --clipboard / pipe to stdin)".into());
         }
     };
 
@@ -298,19 +308,28 @@ const DETECTION_MODEL: &str = "https://ocrs-models.s3-accelerate.amazonaws.com/t
 const RECOGNITION_MODEL: &str =
     "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten";
 
+/// Convert a decoded image into an HWC tensor.
+fn image_to_tensor(image: image::DynamicImage) -> NdTensor<u8, 3> {
+    let image = image.into_rgb8();
+    let (width, height) = image.dimensions();
+    NdTensor::from_data([height as usize, width as usize, 3], image.into_vec())
+}
+
 /// Load an image from a file path.
 fn load_image_from_file(path: &str) -> anyhow::Result<NdTensor<u8, 3>> {
     image::open(path)
-        .map(|image| {
-            let image = image.into_rgb8();
-            let (width, height) = image.dimensions();
-            let in_chans = 3;
-            NdTensor::from_data(
-                [height as usize, width as usize, in_chans],
-                image.into_vec(),
-            )
-        })
+        .map(image_to_tensor)
         .with_context(|| format!("Failed to read image from {}", path))
+}
+
+/// Load an image from stdin.
+fn load_image_from_stdin() -> anyhow::Result<NdTensor<u8, 3>> {
+    let mut buf = Vec::new();
+    std::io::stdin()
+        .read_to_end(&mut buf)
+        .context("Failed to read image from stdin")?;
+    let image = image::load_from_memory(&buf).context("Failed to decode image from stdin")?;
+    Ok(image_to_tensor(image))
 }
 
 /// Load an image from the system clipboard.
@@ -394,6 +413,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let (color_img, input_path): (NdTensor<u8, 3>, String) = match &args.input {
         InputSource::Clipboard => (load_image_from_clipboard()?, "<clipboard>".to_string()),
         InputSource::File(path) => (load_image_from_file(path)?, path.clone()),
+        InputSource::Stdin => (load_image_from_stdin()?, "<stdin>".to_string()),
     };
 
     // Preprocess image for use with OCR engine.
