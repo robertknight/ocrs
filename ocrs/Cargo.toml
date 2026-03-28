@@ -28,8 +28,13 @@ lexopt = "0.3.2"
 rten = { workspace = true }
 
 [features]
+default = ["export-wasm", "rten"]
+# Enables wasm API (i.e. exposes ocrs API to JS)
+export-wasm = []
 # Enables loading custom models in ONNX format
 onnx = ["rten/onnx_format"]
+# Enables loading custom models in rten format
+rten = ["rten/rten_format"]
 
 [lib]
 crate-type = ["lib", "cdylib"]

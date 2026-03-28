@@ -6,6 +6,6 @@ members = [
 ]
 
 [workspace.dependencies]
-rten = { version = "0.24.0", default-features = false, features = ["rten_format"] }
+rten = { version = "0.24.0", default-features = false }
 rten-imageproc = { version = "0.24.0" }
 rten-tensor = { version = "0.24.0" }
