@@ -17,7 +17,7 @@ mod test_util;
 
 mod text_items;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(feature = "export-wasm", target_arch = "wasm32"))]
 mod wasm_api;
 
 use detection::{TextDetector, TextDetectorParams};
