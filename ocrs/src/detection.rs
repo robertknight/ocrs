@@ -183,8 +183,7 @@ impl TextDetector {
 
         let text_mask: Tensor<f32> = self.model.run(image.view(), Some(opts))?;
 
-        // Resize probability mask to original input size and apply threshold to get a
-        // binary text/not-text mask.
+        // Resize probability mask to original input size.
         let text_mask = text_mask
             .slice((
                 ..,
