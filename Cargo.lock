@@ -595,6 +595,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ocrs-capi"
+version = "0.12.2"
+dependencies = [
+ "ocrs",
+ "rten",
+ "rten-imageproc",
+]
+
+[[package]]
 name = "ocrs-cli"
 version = "0.12.2"
 dependencies = [

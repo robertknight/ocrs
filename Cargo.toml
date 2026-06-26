@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "ocrs",
+  "ocrs-capi",
   "ocrs-cli",
 ]
 
