@@ -46,7 +46,13 @@ cargo build -p ocrs-capi --release --features onnx
   (thread-local, valid until the next fallible call on the same thread).
 - Every pointer returned has a matching `*_free` function and must be released
   through it exactly once. Passing `NULL` to any `*_free` is safe.
-- Panics are caught and turned as a `NULL` plus a last-error message.
+- An engine may be used concurrently from multiple threads through a shared
+  `const OcrsEngine *` (the OCR calls take `&self` and parallelize internally).
+  Do not call `ocrs_engine_free` while another thread is still using the engine.
+- Panics are caught at the FFI boundary and turned into a `NULL` return plus a
+  last-error message, rather than unwinding into foreign code. This relies on
+  the default `panic = "unwind"` strategy. If the library is built with
+  `panic = "abort"`, a panic terminates the process instead.
 
 ## Example
 
