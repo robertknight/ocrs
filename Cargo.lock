@@ -634,6 +634,7 @@ name = "ocrs-capi"
 version = "0.12.2"
 dependencies = [
  "cbindgen",
+ "image",
  "ocrs",
  "rten",
  "rten-imageproc",

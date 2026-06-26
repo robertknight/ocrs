@@ -39,6 +39,24 @@ Custom models in ONNX format can be loaded by enabling the `onnx` feature:
 cargo build -p ocrs-capi --release --features onnx
 ```
 
+## Testing
+
+Run unit tests (arg validation, error handling) without models:
+
+```sh
+cargo test -p ocrs-capi
+```
+
+Running full detect/recognize pipline, downloading and using model files:
+
+```sh
+make test-capi
+```
+
+To run them against other models, set `OCRS_DETECTION_MODEL` and
+`OCRS_RECOGNITION_MODEL` to absolute paths and run
+`cargo test -p ocrs-capi --test ocr -- --ignored`.
+
 ## Conventions
 
 - Fallible functions return a pointer and yield `NULL` on failure.

@@ -37,6 +37,16 @@ capi-header:
 test:
 	cargo test --workspace
 
+# Run ocrs-capi integration tests (full OCR pipeline # through the C ABI).
+# These need the model files and so are skipped by `make test`.
+# It downloads the models and runs them in release mode.
+.PHONY: test-capi
+test-capi:
+	cd ocrs/examples && ./download-models.sh
+	OCRS_DETECTION_MODEL=$(CURDIR)/ocrs/examples/text-detection.rten \
+	OCRS_RECOGNITION_MODEL=$(CURDIR)/ocrs/examples/text-recognition.rten \
+	cargo test -p ocrs-capi --release --test ocr -- --ignored
+
 .PHONY: test-e2e
 test-e2e:
 	python tools/test-e2e.py ocrs-cli/test-data/
