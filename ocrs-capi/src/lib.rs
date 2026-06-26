@@ -220,7 +220,9 @@ unsafe fn prepare_input(
         return None;
     }
     if !matches!(channels, 1 | 3 | 4) {
-        set_last_error(format!("unsupported channel count {channels}; expected 1, 3 or 4"));
+        set_last_error(format!(
+            "unsupported channel count {channels}; expected 1, 3 or 4"
+        ));
         return None;
     }
     if width == 0 || height == 0 {
@@ -427,7 +429,11 @@ mod tests {
         if ptr.is_null() {
             None
         } else {
-            Some(unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned())
+            Some(
+                unsafe { CStr::from_ptr(ptr) }
+                    .to_string_lossy()
+                    .into_owned(),
+            )
         }
     }
 
@@ -469,7 +475,9 @@ mod tests {
         let engine =
             unsafe { ocrs_engine_new_from_memory(garbage.as_ptr(), garbage.len(), ptr::null(), 0) };
         assert!(engine.is_null());
-        assert!(last_error().unwrap().contains("detection model from memory"));
+        assert!(last_error()
+            .unwrap()
+            .contains("detection model from memory"));
     }
 
     #[test]

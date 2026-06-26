@@ -4,6 +4,12 @@ A C ABI for the [`ocrs`](../ocrs) OCR engine.
 
 ## Available functions
 
+The following functions are generated from the Rust source with
+[cbindgen](https://github.com/mozilla/cbindgen).
+
+(Run `make capi-header` after changing the API, or rely on the `header`
+test to flag drift.)
+
 - `ocrs_engine_new` / `ocrs_engine_new_from_memory`: create an engine from
   model files or in-memory model buffers.
 - `ocrs_engine_get_text`: detect and recognize all text, returned as one UTF-8

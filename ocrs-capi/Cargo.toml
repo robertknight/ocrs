@@ -14,6 +14,13 @@ ocrs = { path = "../ocrs", version = "0.12.2", default-features = false, feature
 rten = { workspace = true }
 rten-imageproc = { workspace = true }
 
+[dev-dependencies]
+# Used only by the `header` test to verify that `include/ocrs.h` matches the
+# Rust API. Pinned so header generation is deterministic across machines.
+# `default-features = false` drops cbindgen's bundled CLI (clap), which we
+# don't use.
+cbindgen = { version = "=0.29.4", default-features = false }
+
 [features]
 default = []
 # Support loading custom models in ONNX format

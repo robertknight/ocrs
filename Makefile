@@ -27,6 +27,12 @@ example:
 lint:
 	cargo clippy --workspace
 
+# Regenerate the ocrs-capi C header from the Rust source. The `header` test
+# checks it is up to date.
+.PHONY: capi-header
+capi-header:
+	OCRS_UPDATE_HEADER=1 cargo test -p ocrs-capi --test header
+
 .PHONY: test
 test:
 	cargo test --workspace
