@@ -1,0 +1,6 @@
+image.rgb
+main
+main.o
+*.rten
+.zig-cache/
+zig-out/

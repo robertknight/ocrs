@@ -1,0 +1,33 @@
+[package]
+name = "ocrs-capi"
+version = "0.12.2"
+edition = "2021"
+authors = ["Robert Knight"]
+description = "C ABI for the ocrs OCR engine"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/robertknight/ocrs"
+repository = "https://github.com/robertknight/ocrs"
+publish = false
+
+[dependencies]
+ocrs = { path = "../ocrs", version = "0.12.2", default-features = false, features = ["rten"] }
+rten = { workspace = true }
+rten-imageproc = { workspace = true }
+
+[dev-dependencies]
+# Used only by the `header` test to verify that `include/ocrs.h` matches the
+# Rust API. Pinned so header generation is deterministic across machines.
+# `default-features = false` drops cbindgen's bundled CLI (clap), which we
+# don't use.
+cbindgen = { version = "=0.29.4", default-features = false }
+# Used by the `ocr` integration test to decode the test image to raw pixels.
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+
+[features]
+default = []
+# Support loading custom models in ONNX format
+onnx = ["ocrs/onnx"]
+
+[lib]
+name = "ocrs_capi"
+crate-type = ["lib", "cdylib", "staticlib"]

@@ -27,9 +27,25 @@ example:
 lint:
 	cargo clippy --workspace
 
+# Regenerate the ocrs-capi C header from the Rust source. The `header` test
+# checks it is up to date.
+.PHONY: capi-header
+capi-header:
+	OCRS_UPDATE_HEADER=1 cargo test -p ocrs-capi --test header
+
 .PHONY: test
 test:
 	cargo test --workspace
+
+# Run ocrs-capi integration tests (full OCR pipeline # through the C ABI).
+# These need the model files and so are skipped by `make test`.
+# It downloads the models and runs them in release mode.
+.PHONY: test-capi
+test-capi:
+	cd ocrs/examples && ./download-models.sh
+	OCRS_DETECTION_MODEL=$(CURDIR)/ocrs/examples/text-detection.rten \
+	OCRS_RECOGNITION_MODEL=$(CURDIR)/ocrs/examples/text-recognition.rten \
+	cargo test -p ocrs-capi --release --test ocr -- --ignored
 
 .PHONY: test-e2e
 test-e2e:
