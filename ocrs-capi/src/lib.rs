@@ -154,6 +154,8 @@ unsafe fn load_model_memory(
 ///
 /// Returns NULL on failure. See [`ocrs_last_error`].
 ///
+/// # Safety
+///
 /// Each non-NULL path argument must point to a NUL-terminated C string.
 #[no_mangle]
 pub unsafe extern "C" fn ocrs_engine_new(
@@ -177,6 +179,8 @@ pub unsafe extern "C" fn ocrs_engine_new(
 ///
 /// Returns NULL on failure. See [`ocrs_last_error`].
 ///
+/// # Safety
+///
 /// Each non-NULL model pointer must point to at least `*_len` readable bytes.
 #[no_mangle]
 pub unsafe extern "C" fn ocrs_engine_new_from_memory(
@@ -196,6 +200,8 @@ pub unsafe extern "C" fn ocrs_engine_new_from_memory(
 }
 
 /// Free an engine created by `ocrs_engine_new*`. Passing NULL is a no-op.
+///
+/// # Safety
 ///
 /// `engine` must be NULL or a pointer returned by `ocrs_engine_new*` that has
 /// not already been freed.
@@ -263,6 +269,8 @@ unsafe fn prepare_input(
 /// Returns NULL on failure. See [`ocrs_last_error`]. Free the result with
 /// [`ocrs_string_free`].
 ///
+/// # Safety
+///
 /// `engine` must be a valid engine pointer and `image_data` must point to at
 /// least `width * height * channels` readable bytes.
 #[no_mangle]
@@ -308,6 +316,8 @@ pub unsafe extern "C" fn ocrs_engine_get_text(
 ///
 /// Returns NULL on failure. See [`ocrs_last_error`]. Free the result with
 /// [`ocrs_text_lines_free`].
+///
+/// # Safety
 ///
 /// `engine` must be a valid engine pointer and `image_data` must point to at
 /// least `width * height * channels` readable bytes.
@@ -379,6 +389,8 @@ pub unsafe extern "C" fn ocrs_engine_get_text_lines(
 
 /// Free a string returned by [`ocrs_engine_get_text`]. Passing NULL is a no-op.
 ///
+/// # Safety
+///
 /// `text` must be NULL or a pointer returned by [`ocrs_engine_get_text`] that
 /// has not already been freed.
 #[no_mangle]
@@ -390,6 +402,8 @@ pub unsafe extern "C" fn ocrs_string_free(text: *mut c_char) {
 
 /// Free a result returned by [`ocrs_engine_get_text_lines`], including every
 /// line's text. Passing NULL is a no-op.
+///
+/// # Safety
 ///
 /// `lines` must be NULL or a pointer returned by [`ocrs_engine_get_text_lines`]
 /// that has not already been freed.

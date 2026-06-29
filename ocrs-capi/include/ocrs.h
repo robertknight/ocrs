@@ -56,6 +56,8 @@ const char *ocrs_last_error(void);
 //
 // Returns NULL on failure. See [`ocrs_last_error`].
 //
+// # Safety
+//
 // Each non-NULL path argument must point to a NUL-terminated C string.
 struct OcrsEngine *ocrs_engine_new(const char *detection_model_path,
                                    const char *recognition_model_path);
@@ -68,6 +70,8 @@ struct OcrsEngine *ocrs_engine_new(const char *detection_model_path,
 //
 // Returns NULL on failure. See [`ocrs_last_error`].
 //
+// # Safety
+//
 // Each non-NULL model pointer must point to at least `*_len` readable bytes.
 struct OcrsEngine *ocrs_engine_new_from_memory(const uint8_t *detection_model,
                                                size_t detection_model_len,
@@ -75,6 +79,8 @@ struct OcrsEngine *ocrs_engine_new_from_memory(const uint8_t *detection_model,
                                                size_t recognition_model_len);
 
 // Free an engine created by `ocrs_engine_new*`. Passing NULL is a no-op.
+//
+// # Safety
 //
 // `engine` must be NULL or a pointer returned by `ocrs_engine_new*` that has
 // not already been freed.
@@ -88,6 +94,8 @@ void ocrs_engine_free(struct OcrsEngine *engine);
 //
 // Returns NULL on failure. See [`ocrs_last_error`]. Free the result with
 // [`ocrs_string_free`].
+//
+// # Safety
 //
 // `engine` must be a valid engine pointer and `image_data` must point to at
 // least `width * height * channels` readable bytes.
@@ -106,6 +114,8 @@ char *ocrs_engine_get_text(const struct OcrsEngine *engine,
 // Returns NULL on failure. See [`ocrs_last_error`]. Free the result with
 // [`ocrs_text_lines_free`].
 //
+// # Safety
+//
 // `engine` must be a valid engine pointer and `image_data` must point to at
 // least `width * height * channels` readable bytes.
 struct OcrsTextLines *ocrs_engine_get_text_lines(const struct OcrsEngine *engine,
@@ -116,12 +126,16 @@ struct OcrsTextLines *ocrs_engine_get_text_lines(const struct OcrsEngine *engine
 
 // Free a string returned by [`ocrs_engine_get_text`]. Passing NULL is a no-op.
 //
+// # Safety
+//
 // `text` must be NULL or a pointer returned by [`ocrs_engine_get_text`] that
 // has not already been freed.
 void ocrs_string_free(char *text);
 
 // Free a result returned by [`ocrs_engine_get_text_lines`], including every
 // line's text. Passing NULL is a no-op.
+//
+// # Safety
 //
 // `lines` must be NULL or a pointer returned by [`ocrs_engine_get_text_lines`]
 // that has not already been freed.
