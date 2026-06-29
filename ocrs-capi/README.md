@@ -30,8 +30,8 @@ is the caller's responsibility.
 cargo build -p ocrs-capi --release
 ```
 
-The library name is `ocrs_capi` (not `ocrs`) (`cdylib` already taken by `ocrs`
-crate).
+The library name is `ocrs_capi` (not `ocrs`), because the `ocrs` name is
+already taken by the `ocrs` crate.
 
 Custom models in ONNX format can be loaded by enabling the `onnx` feature:
 
@@ -47,7 +47,7 @@ Run unit tests (arg validation, error handling) without models:
 cargo test -p ocrs-capi
 ```
 
-Running full detect/recognize pipline, downloading and using model files:
+Running full detect/recognize pipeline, downloading and using model files:
 
 ```sh
 make test-capi
@@ -108,14 +108,14 @@ zig build-exe examples/zig/main.zig -I include \
 ../target/release/libocrs_capi.a -lc -lm
 ```
 
-4. Run the test
+4. Run the example
 
 Run `./main` from the directory containing the `.rten` files and `image.rgb`.
 
 (The same `libocrs_capi.a` plus `include/ocrs.h` can be wired into a `build.zig`
 with `exe.addObjectFile`, `exe.addIncludePath` and `exe.linkLibC()`.)
 
-## macOS linking noters
+## macOS linking notes
 
 `ocrs` uses [`rten`](https://github.com/robertknight/rten) for inference.
 macOS pulls in the `Accelerate`, `CoreFoundation`, and `Security` system
