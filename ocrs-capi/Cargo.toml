@@ -1,6 +1,6 @@
 [package]
 name = "ocrs-capi"
-version = "0.12.2"
+version = "0.13.0"
 edition = "2021"
 authors = ["Robert Knight"]
 description = "C ABI for the ocrs OCR engine"
@@ -10,7 +10,7 @@ repository = "https://github.com/robertknight/ocrs"
 publish = false
 
 [dependencies]
-ocrs = { path = "../ocrs", version = "0.12.2", default-features = false, features = ["rten"] }
+ocrs = { path = "../ocrs", version = "0.13.0", default-features = false, features = ["rten"] }
 rten = { workspace = true }
 rten-imageproc = { workspace = true }
 
