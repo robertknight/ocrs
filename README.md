@@ -112,6 +112,9 @@ cd ocrs
 cargo run -p ocrs-cli -r -- image.png
 ```
 
+Common development tasks are defined as recipes in the `justfile` and run with
+[just](https://github.com/casey/just). Run `just --list` to see them all.
+
 ### Testing
 
 Ocrs has unit tests for the code that runs before and after ML model processing,
@@ -120,7 +123,7 @@ plus E2E tests which exercise the whole pipeline, including models.
 After making changes to the code, run unit tests and lint checks with:
 
 ```sh
-make check
+just check
 ```
 
 You can also run standard commands like `cargo test` directly.
@@ -128,7 +131,7 @@ You can also run standard commands like `cargo test` directly.
 Run the E2E tests with:
 
 ```sh
-make test-e2e
+just test-e2e
 ```
 
 For details of how the ML models are evaluated, see the

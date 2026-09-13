@@ -7,7 +7,7 @@ A C ABI for the [`ocrs`](../ocrs) OCR engine.
 The following functions are generated from the Rust source with
 [cbindgen](https://github.com/mozilla/cbindgen).
 
-(Run `make capi-header` after changing the API, or rely on the `header`
+(Run `just capi-header` after changing the API, or rely on the `header`
 test to flag drift.)
 
 - `ocrs_engine_new` / `ocrs_engine_new_from_memory`: create an engine from
@@ -50,7 +50,7 @@ cargo test -p ocrs-capi
 Running full detect/recognize pipeline, downloading and using model files:
 
 ```sh
-make test-capi
+just test-capi
 ```
 
 To run them against other models, set `OCRS_DETECTION_MODEL` and

@@ -1,0 +1,12 @@
+# Assemble the extension's build directory and compile the TypeScript sources.
+build:
+    mkdir -p build
+    cp ../dist/ocrs.js ../dist/ocrs.d.ts build/
+    cp ../dist/ocrs_bg.wasm build/
+    cp ../models/ocr/text-detection.rten build/
+    cp ../models/ocr/text-recognition.rten build/
+    npm run build
+
+# Remove build outputs.
+clean:
+    rm -rf build build-extension
