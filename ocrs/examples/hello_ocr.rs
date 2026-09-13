@@ -47,8 +47,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = parse_args()?;
 
     // Use the `download-models.sh` script to download the models.
-    let detection_model_path = file_path("examples/text-detection.rten");
-    let rec_model_path = file_path("examples/text-recognition.rten");
+    let detection_model_path = file_path("examples/text-detection.onnx");
+    let rec_model_path = file_path("examples/text-recognition.onnx");
 
     let detection_model = Model::load_file(detection_model_path)?;
     let recognition_model = Model::load_file(rec_model_path)?;

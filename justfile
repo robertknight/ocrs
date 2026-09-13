@@ -43,8 +43,8 @@ test:
 # Run ocrs-capi integration tests (full OCR pipeline through the C ABI).
 test-capi:
     cd ocrs/examples && ./download-models.sh
-    OCRS_DETECTION_MODEL={{justfile_directory()}}/ocrs/examples/text-detection.rten \
-    OCRS_RECOGNITION_MODEL={{justfile_directory()}}/ocrs/examples/text-recognition.rten \
+    OCRS_DETECTION_MODEL={{justfile_directory()}}/ocrs/examples/text-detection.onnx \
+    OCRS_RECOGNITION_MODEL={{justfile_directory()}}/ocrs/examples/text-recognition.onnx \
     cargo test -p ocrs-capi --release --test ocr -- --ignored
 
 # Run end-to-end tests against the CLI.
@@ -63,7 +63,7 @@ wasm:
 
 # Run the result using:
 #
-#   wasmtime --dir . target/wasm32-wasi/release/ocrs.wasm --detect-model text-detection.rten --rec-model text-recognition.rten ocrs-cli/test-data/why-rust.png
+#   wasmtime --dir . target/wasm32-wasi/release/ocrs.wasm --detect-model text-detection.onnx --rec-model text-recognition.onnx ocrs-cli/test-data/why-rust.png
 
 # Build Ocrs CLI for non-browser WebAssembly runtimes (eg. wasmtime).
 wasm-wasi:

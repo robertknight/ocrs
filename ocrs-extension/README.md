@@ -22,7 +22,7 @@ It has currently only been tested in Chrome.
     ```sh
     cargo run -r -p ocrs-cli test-image.jpeg
     mkdir -p models/ocr
-    cp ~/.cache/ocrs/text-detection.rten ~/.cache/ocrs/text-recognition.rten models/ocr
+    cp ~/.cache/ocrs/text-detection.onnx ~/.cache/ocrs/text-recognition.onnx models/ocr
     ```
 
     Where `test-image.jpeg` can be any image you have available.

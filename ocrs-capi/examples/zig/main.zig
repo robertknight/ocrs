@@ -4,8 +4,8 @@
 //! raw pixel data are hardcoded. Makes the example simpler instead of going
 //! through Zig Io for the sake of the example.
 //!
-//! See `README.md` for how to produce `text-detection.rten`,
-//! `text-recognition.rten` and the raw `image.rgb` referenced below, and for
+//! See `README.md` for how to produce `text-detection.onnx`,
+//! `text-recognition.onnx` and the raw `image.rgb` referenced below, and for
 //! the exact `zig build-exe` command used to link against `libocrs_capi`.
 
 const std = @import("std");
@@ -14,8 +14,8 @@ const c = @cImport({
 });
 
 // Paths to the model files, relative to the working directory at run time.
-const detection_model = "text-detection.rten";
-const recognition_model = "text-recognition.rten";
+const detection_model = "text-detection.onnx";
+const recognition_model = "text-recognition.onnx";
 
 // Raw 8-bit pixels in row-major, channels-last (HWC) order. Generate this with
 // the Python snippet in README.md and update the dimensions to match.

@@ -80,8 +80,8 @@ recognizes text in an image.
 1. Download the models:
 
 ```sh
-curl -O https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten
-curl -O https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten
+curl -O https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.onnx
+curl -O https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.onnx
 ```
 
 2. Produce raw pixels from any image (here using Python + Pillow). Update the
@@ -110,7 +110,7 @@ zig build-exe examples/zig/main.zig -I include \
 
 4. Run the example
 
-Run `./main` from the directory containing the `.rten` files and `image.rgb`.
+Run `./main` from the directory containing the `.onnx` files and `image.rgb`.
 
 (The same `libocrs_capi.a` plus `include/ocrs.h` can be wired into a `build.zig`
 with `exe.addObjectFile`, `exe.addIncludePath` and `exe.linkLibC()`.)
