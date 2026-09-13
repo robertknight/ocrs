@@ -3,8 +3,8 @@
 //!
 //! Read the model paths from environment variables:
 //!
-//!   OCRS_DETECTION_MODEL   = path to text-detection.rten
-//!   OCRS_RECOGNITION_MODEL = path to text-recognition.rten
+//!   OCRS_DETECTION_MODEL   = path to text-detection.onnx
+//!   OCRS_RECOGNITION_MODEL = path to text-recognition.onnx
 //!
 //! Run them (downloading the models first) with:
 //!

@@ -148,9 +148,9 @@ unsafe fn load_model_memory(
 /// Create an engine, loading the detection and recognition models from files.
 ///
 /// `detection_model_path` and `recognition_model_path` are NUL-terminated paths
-/// to `.rten` model files (or `.onnx` if built with the `onnx` feature). Either
-/// may be NULL to omit that model, though detection is required for
-/// [`ocrs_engine_get_text`] and recognition is required for any text output.
+/// to `.onnx` model files. Either may be NULL to omit that model, though
+/// detection is required for [`ocrs_engine_get_text`] and recognition is
+/// required for any text output.
 ///
 /// Returns NULL on failure. See [`ocrs_last_error`].
 ///
@@ -476,7 +476,7 @@ mod tests {
 
     #[test]
     fn new_with_bad_path_reports_error() {
-        let path = CString::new("/no/such/model.rten").unwrap();
+        let path = CString::new("/no/such/model.onnx").unwrap();
         let engine = unsafe { ocrs_engine_new(path.as_ptr(), ptr::null()) };
         assert!(engine.is_null());
         let err = last_error().expect("error should be set");
