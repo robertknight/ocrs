@@ -98,8 +98,7 @@ library.
 ocrs uses neural network models written in PyTorch. See the
 [ocrs-models](https://github.com/robertknight/ocrs-models) repository for more
 details about the models and datasets, as well as tools for training custom
-models. These models are also available in ONNX format for use with other
-machine learning runtimes.
+models.
 
 ## Development
 
