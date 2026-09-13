@@ -25,21 +25,23 @@ jobs:
           ~/.cargo/git/db/
           target/
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    - name: Install just
+      uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2.0.0
     - name: Install wasm-bindgen
       run: cargo install wasm-bindgen-cli --version 0.2.100
       if: ${{ matrix.os == 'ubuntu-latest' }}
     - name: Build
       run: cargo build --features clipboard
     - name: WASM build
-      run: make wasm
+      run: just wasm
       if: ${{ matrix.os == 'ubuntu-latest' }}
     - name: Test
-      run: make test
+      run: just test
     - name: Lint
       run: |
-        make checkformatting
-        make lint
+        just checkformatting
+        just lint
     - name: Docs
-      run: make doc
+      run: just doc
     - name: E2E Test
-      run: make test-e2e
+      run: just test-e2e

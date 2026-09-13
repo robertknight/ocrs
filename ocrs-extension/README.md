@@ -11,7 +11,7 @@ It has currently only been tested in Chrome.
     repository run:
 
     ```sh
-    make wasm
+    just wasm
     ```
 
 2.  Download pre-trained models. The easiest way to do this is to run the
@@ -32,7 +32,7 @@ It has currently only been tested in Chrome.
     ```sh
     cd ocrs-extension
     npm install
-    make build
+    just build
     ```
 
 4.  In Chrome, go to `chrome://extensions` and select "Load unpacked extension",
