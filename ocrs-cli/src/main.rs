@@ -302,11 +302,11 @@ Advanced options:
 }
 
 /// Default text detection model.
-const DETECTION_MODEL: &str = "https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten";
+const DETECTION_MODEL: &str = "https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.onnx";
 
 /// Default text recognition model.
 const RECOGNITION_MODEL: &str =
-    "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten";
+    "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.onnx";
 
 /// Convert a decoded image into an HWC tensor.
 fn image_to_tensor(image: image::DynamicImage) -> NdTensor<u8, 3> {

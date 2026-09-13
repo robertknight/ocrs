@@ -18,7 +18,7 @@ a Rust application.
 ```sh
 cd examples/
 
-# Download models in .rten format.
+# Download models in .onnx format.
 ./download-models.sh
 
 # Run OCR on an image and print the extracted text.

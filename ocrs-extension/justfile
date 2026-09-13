@@ -3,8 +3,8 @@ build:
     mkdir -p build
     cp ../dist/ocrs.js ../dist/ocrs.d.ts build/
     cp ../dist/ocrs_bg.wasm build/
-    cp ../models/ocr/text-detection.rten build/
-    cp ../models/ocr/text-recognition.rten build/
+    cp ../models/ocr/text-detection.onnx build/
+    cp ../models/ocr/text-recognition.onnx build/
     npm run build
 
 # Remove build outputs.

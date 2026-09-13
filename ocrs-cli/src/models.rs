@@ -27,7 +27,7 @@ fn cache_dir() -> Result<PathBuf, anyhow::Error> {
 
 /// Extract the last path segment from a URL.
 ///
-/// eg. "https://models.com/text-detection.rten" => "text-detection.rten".
+/// eg. "https://models.com/text-detection.onnx" => "text-detection.onnx".
 #[cfg(not(target_arch = "wasm32"))]
 #[allow(rustdoc::bare_urls)]
 fn filename_from_url(url: &str) -> Option<String> {
