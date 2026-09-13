@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.1] - 2026-09-13
+
+- Enabled support for ONNX-format models by default and changed the CLI,
+  examples and documentation to use ONNX versions of existing models
+  (https://github.com/robertknight/ocrs/pull/272).
+
+  This change is in preparation for phasing out support for the `.rten` format
+  in future releases of the RTen runtime. Models in `.rten` format continue to
+  be supported, but a future release of Ocrs will remove this.
+
 ## [0.13.0] - 2026-08-29
 
 - Updated to rten v0.26. This improves text recognition speed by 15-20%
