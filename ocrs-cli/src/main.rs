@@ -463,7 +463,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         OutputFormat::Json => {
             let content = format_json_output(FormatJsonArgs {
                 input_path: &input_path,
-                input_hw: color_img.shape()[1..].try_into()?,
+                input_hw: color_img.shape()[..2].try_into()?,
                 text_lines: &line_texts,
             });
             write_output_str(content)?;
@@ -488,8 +488,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             "Found {} words, {} lines in image of size {}x{}",
             word_rects.len(),
             line_rects.len(),
-            color_img.size(2),
             color_img.size(1),
+            color_img.size(0),
         );
     }
 
