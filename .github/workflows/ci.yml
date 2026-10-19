@@ -28,7 +28,8 @@ jobs:
     - name: Install just
       uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2.0.0
     - name: Install wasm-bindgen
-      run: cargo install wasm-bindgen-cli --version 0.2.100
+      # wasm-bindgen-cli version must match `wasm-bindgen` version in Cargo.lock
+      run: cargo install wasm-bindgen-cli --version "$(cargo pkgid wasm-bindgen | sed 's/.*@//')"
       if: ${{ matrix.os == 'ubuntu-latest' }}
     - name: Build
       run: cargo build --features clipboard
