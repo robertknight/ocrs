@@ -9,7 +9,7 @@ use anyhow::anyhow;
 use rten::Model;
 
 #[cfg(not(target_arch = "wasm32"))]
-use url::Url;
+use crate::url::Url;
 
 /// Return the path to the directory in which cached models etc. should be
 /// saved.
