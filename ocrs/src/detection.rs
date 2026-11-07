@@ -1,9 +1,9 @@
-use anyhow::anyhow;
 use rten::{Dimension, FloatOperators, Operators, RunOptions};
 use rten_imageproc::{find_contours, min_area_rect, simplify_polygon, RetrievalMode, RotatedRect};
 use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView, Tensor};
 
+use crate::errors::{ModelError, OcrError};
 use crate::model::Model;
 use crate::preprocess::BLACK_VALUE;
 
@@ -76,7 +76,7 @@ impl TextDetector {
     pub fn from_model(
         model: impl Model + Send + Sync + 'static,
         params: TextDetectorParams,
-    ) -> anyhow::Result<TextDetector> {
+    ) -> Result<TextDetector, OcrError> {
         let input_shape = model.input_shape()?;
         Ok(TextDetector {
             model: Box::new(model),
@@ -105,7 +105,7 @@ impl TextDetector {
         &self,
         image: NdTensorView<f32, 3>,
         debug: bool,
-    ) -> anyhow::Result<Vec<RotatedRect>> {
+    ) -> Result<Vec<RotatedRect>, OcrError> {
         let text_mask = self.detect_text_pixels(image, debug)?;
         let binary_mask = text_mask.map(|prob| *prob > self.params.text_threshold);
 
@@ -132,7 +132,7 @@ impl TextDetector {
         &self,
         image: NdTensorView<f32, 3>,
         debug: bool,
-    ) -> anyhow::Result<NdTensor<f32, 2>> {
+    ) -> Result<NdTensor<f32, 2>, OcrError> {
         let [img_chans, img_height, img_width] = image.shape();
 
         // Add batch dim
@@ -140,7 +140,7 @@ impl TextDetector {
 
         let [_, _, Dimension::Fixed(in_height), Dimension::Fixed(in_width)] = self.input_shape[..]
         else {
-            return Err(anyhow!("failed to get model dims"));
+            return Err(ModelError::UnsupportedInputShape.into());
         };
 
         // Pad small images to the input size of the text detection model. This is
@@ -159,14 +159,16 @@ impl TextDetector {
                 let pads = &[0, 0, 0, 0, 0, 0, pad_bottom, pad_right];
                 image.pad(pads.into(), BLACK_VALUE)
             })
-            .transpose()?
+            .transpose()
+            .map_err(OcrError::inference_failed)?
             .map(|t| t.into_cow())
             .unwrap_or(image.as_dyn().as_cow());
 
         // Resize images to the text detection model's input size.
         let image = (image.size(2) != in_height || image.size(3) != in_width)
             .then(|| image.resize_image([in_height, in_width]))
-            .transpose()?
+            .transpose()
+            .map_err(OcrError::inference_failed)?
             .map(|t| t.into_cow())
             .unwrap_or(image);
 
@@ -191,7 +193,8 @@ impl TextDetector {
                 ..(in_height - pad_bottom as usize),
                 ..(in_width - pad_right as usize),
             ))
-            .resize_image([img_height, img_width])?;
+            .resize_image([img_height, img_width])
+            .map_err(OcrError::inference_failed)?;
 
         // Remove batch, channel dims.
         let text_mask = text_mask.into_shape([img_height, img_width]);

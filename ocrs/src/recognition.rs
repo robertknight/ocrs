@@ -10,7 +10,7 @@ use rten_imageproc::{
 use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView, NdTensorViewMut, Tensor};
 
-use crate::errors::ModelRunError;
+use crate::errors::{ModelError, OcrError};
 use crate::geom_util::{downwards_line, leftmost_edge, rightmost_edge};
 use crate::model::Model;
 use crate::preprocess::BLACK_VALUE;
@@ -320,7 +320,9 @@ pub struct TextRecognizer {
 impl TextRecognizer {
     /// Initialize a text recognizer from a trained RTen model. Fails if the
     /// model does not have the expected inputs or outputs.
-    pub fn from_model(model: impl Model + Send + Sync + 'static) -> anyhow::Result<TextRecognizer> {
+    pub fn from_model(
+        model: impl Model + Send + Sync + 'static,
+    ) -> Result<TextRecognizer, OcrError> {
         let input_shape = model.input_shape()?;
         Ok(TextRecognizer {
             model: Box::new(model),
@@ -338,16 +340,13 @@ impl TextRecognizer {
 
     /// Run text recognition on an NCHW batch of text line images, and return
     /// a `[batch, seq, label]` tensor of class probabilities.
-    fn run(&self, input: NdTensor<f32, 4>) -> Result<NdTensor<f32, 3>, ModelRunError> {
+    fn run(&self, input: NdTensor<f32, 4>) -> Result<NdTensor<f32, 3>, ModelError> {
         let input: Tensor<f32> = input.into();
-        let output = self
-            .model
-            .run(input.view(), None)
-            .map_err(|err| ModelRunError::RunFailed(err.into()))?;
+        let output = self.model.run(input.view(), None)?;
 
         let output_ndim = output.ndim();
         let mut rec_sequence: NdTensor<f32, 3> = output.try_into().map_err(|_| {
-            ModelRunError::WrongOutput(format!(
+            ModelError::WrongOutput(format!(
                 "expected recognition output to have 3 dims but it has {}",
                 output_ndim
             ))
@@ -406,7 +405,7 @@ impl TextRecognizer {
         image: NdTensorView<f32, 3>,
         lines: &[Vec<RotatedRect>],
         opts: RecognitionOpt,
-    ) -> anyhow::Result<Vec<Option<TextLine>>> {
+    ) -> Result<Vec<Option<TextLine>>, OcrError> {
         let RecognitionOpt {
             debug,
             decode_method,
@@ -461,7 +460,7 @@ impl TextRecognizer {
         let alphabet_len = alphabet.chars().count();
 
         // Run text recognition on batches of lines.
-        let batch_rec_results: Result<Vec<Vec<LineRecResult>>, ModelRunError> =
+        let batch_rec_results: Result<Vec<Vec<LineRecResult>>, ModelError> =
             thread_pool().run(|| {
                 line_groups
                     .into_par_iter()
@@ -485,7 +484,7 @@ impl TextRecognizer {
                         let mut rec_output = self.run(rec_input)?;
 
                         if alphabet_len + 1 != rec_output.size(2) {
-                            return Err(ModelRunError::WrongOutput(format!(
+                            return Err(ModelError::WrongOutput(format!(
                                 "output column count ({}) does not match alphabet size ({})",
                                 rec_output.size(2),
                                 alphabet_len + 1

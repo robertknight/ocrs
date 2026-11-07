@@ -582,7 +582,6 @@ dependencies = [
 name = "ocrs"
 version = "0.13.1"
 dependencies = [
- "anyhow",
  "fastrand",
  "image",
  "lexopt",
