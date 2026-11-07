@@ -12,6 +12,8 @@ use rten_tensor::{NdTensor, NdTensorView};
 mod models;
 use models::{load_model, ModelSource};
 mod output;
+#[cfg(not(target_arch = "wasm32"))]
+mod url;
 use output::{
     format_json_output, format_text_output, generate_annotated_png, FormatJsonArgs,
     GeneratePngArgs, OutputFormat,
