@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Breaking changes
+
+- `OcrEngine` methods now return a dedicated `OcrError` type instead of
+  `anyhow::Error` (https://github.com/robertknight/ocrs/issues/224).
+
 ## [0.13.1] - 2026-09-13
 
 - Enabled support for ONNX-format models by default and changed the CLI,

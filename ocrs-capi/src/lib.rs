@@ -96,7 +96,7 @@ fn make_engine(
         recognition_model,
         ..Default::default()
     })
-    .map_err(|err| format!("failed to create engine: {err}"))?;
+    .map_err(|err| format!("failed to create engine: {err:#}"))?;
     Ok(Box::into_raw(Box::new(OcrsEngine { engine })))
 }
 
@@ -254,7 +254,7 @@ unsafe fn prepare_input(
     match engine.engine.prepare_input(source) {
         Ok(input) => Some(input),
         Err(err) => {
-            set_last_error(format!("failed to prepare image: {err}"));
+            set_last_error(format!("failed to prepare image: {err:#}"));
             None
         }
     }
@@ -301,7 +301,7 @@ pub unsafe extern "C" fn ocrs_engine_get_text(
                 }
             },
             Err(err) => {
-                set_last_error(format!("OCR failed: {err}"));
+                set_last_error(format!("OCR failed: {err:#}"));
                 ptr::null_mut()
             }
         }
@@ -341,7 +341,7 @@ pub unsafe extern "C" fn ocrs_engine_get_text_lines(
         let words = match engine.engine.detect_words(&input) {
             Ok(words) => words,
             Err(err) => {
-                set_last_error(format!("word detection failed: {err}"));
+                set_last_error(format!("word detection failed: {err:#}"));
                 return ptr::null_mut();
             }
         };
@@ -349,7 +349,7 @@ pub unsafe extern "C" fn ocrs_engine_get_text_lines(
         let recognized = match engine.engine.recognize_text(&input, &line_rects) {
             Ok(lines) => lines,
             Err(err) => {
-                set_last_error(format!("text recognition failed: {err}"));
+                set_last_error(format!("text recognition failed: {err:#}"));
                 return ptr::null_mut();
             }
         };

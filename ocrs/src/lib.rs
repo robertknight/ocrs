@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use rten_imageproc::RotatedRect;
 use rten_tensor::prelude::*;
 use rten_tensor::NdTensor;
@@ -26,6 +25,7 @@ use model::Model;
 use preprocess::prepare_image;
 use recognition::{RecognitionOpt, TextRecognizer};
 
+pub use errors::{OcrError, OcrErrorKind};
 pub use preprocess::{DimOrder, ImagePixels, ImageSource, ImageSourceError};
 pub use recognition::DecodeMethod;
 pub use text_items::{TextChar, TextItem, TextLine, TextWord};
@@ -129,14 +129,14 @@ pub struct OcrInput {
 
 impl OcrEngine {
     /// Construct a new engine from a given configuration.
-    pub fn new(params: OcrEngineParams) -> anyhow::Result<OcrEngine> {
+    pub fn new(params: OcrEngineParams) -> Result<OcrEngine, OcrError> {
         Self::new_impl(params.into())
     }
 
     /// Internal constructor which allows using a dummy inference engine in tests.
     fn new_impl<M: Model + Send + Sync + 'static>(
         params: OcrEngineParamsImpl<M>,
-    ) -> anyhow::Result<OcrEngine> {
+    ) -> Result<OcrEngine, OcrError> {
         let detector = params
             .detection_model
             .map(|model| TextDetector::from_model(model, Default::default()))
@@ -180,7 +180,7 @@ impl OcrEngine {
     }
 
     /// Preprocess an image for use with other methods of the engine.
-    pub fn prepare_input(&self, image: ImageSource) -> anyhow::Result<OcrInput> {
+    pub fn prepare_input(&self, image: ImageSource) -> Result<OcrInput, OcrError> {
         Ok(OcrInput {
             image: prepare_image(image),
         })
@@ -190,11 +190,11 @@ impl OcrEngine {
     ///
     /// Returns an unordered list of the oriented bounding rectangles of each
     /// word found.
-    pub fn detect_words(&self, input: &OcrInput) -> anyhow::Result<Vec<RotatedRect>> {
+    pub fn detect_words(&self, input: &OcrInput) -> Result<Vec<RotatedRect>, OcrError> {
         if let Some(detector) = self.detector.as_ref() {
             detector.detect_words(input.image.view(), self.debug)
         } else {
-            Err(anyhow!("Detection model not loaded"))
+            Err(OcrError::new(OcrErrorKind::DetectionModelNotLoaded))
         }
     }
 
@@ -204,11 +204,11 @@ impl OcrEngine {
     /// input being part of a text word. This is a low-level API that is useful
     /// for debugging purposes. Use [detect_words](OcrEngine::detect_words) for
     /// a higher-level API that returns oriented bounding boxes of words.
-    pub fn detect_text_pixels(&self, input: &OcrInput) -> anyhow::Result<NdTensor<f32, 2>> {
+    pub fn detect_text_pixels(&self, input: &OcrInput) -> Result<NdTensor<f32, 2>, OcrError> {
         if let Some(detector) = self.detector.as_ref() {
             detector.detect_text_pixels(input.image.view(), self.debug)
         } else {
-            Err(anyhow!("Detection model not loaded"))
+            Err(OcrError::new(OcrErrorKind::DetectionModelNotLoaded))
         }
     }
 
@@ -238,7 +238,7 @@ impl OcrEngine {
         &self,
         input: &OcrInput,
         lines: &[Vec<RotatedRect>],
-    ) -> anyhow::Result<Vec<Option<TextLine>>> {
+    ) -> Result<Vec<Option<TextLine>>, OcrError> {
         if let Some(recognizer) = self.recognizer.as_ref() {
             recognizer.recognize_text_lines(
                 input.image.view(),
@@ -251,7 +251,7 @@ impl OcrEngine {
                 },
             )
         } else {
-            Err(anyhow!("Recognition model not loaded"))
+            Err(OcrError::new(OcrErrorKind::RecognitionModelNotLoaded))
         }
     }
 
@@ -269,9 +269,9 @@ impl OcrEngine {
         &self,
         input: &OcrInput,
         line: &[RotatedRect],
-    ) -> anyhow::Result<NdTensor<f32, 2>> {
+    ) -> Result<NdTensor<f32, 2>, OcrError> {
         let Some(recognizer) = self.recognizer.as_ref() else {
-            return Err(anyhow!("Recognition model not loaded"));
+            return Err(OcrError::new(OcrErrorKind::RecognitionModelNotLoaded));
         };
         let line_image = recognizer.prepare_input(input.image.view(), line);
         Ok(line_image)
@@ -287,7 +287,7 @@ impl OcrEngine {
     }
 
     /// Convenience API that extracts all text from an image as a single string.
-    pub fn get_text(&self, input: &OcrInput) -> anyhow::Result<String> {
+    pub fn get_text(&self, input: &OcrInput) -> Result<String, OcrError> {
         let word_rects = self.detect_words(input)?;
         let line_rects = self.find_text_lines(input, &word_rects);
         let text = self
@@ -310,7 +310,11 @@ mod tests {
     use rten_tensor::TensorView;
     use rten_tensor::{NdTensor, NdTensorView, Tensor};
 
-    use super::{DimOrder, ImageSource, Model, OcrEngine, OcrEngineParamsImpl, DEFAULT_ALPHABET};
+    use super::{
+        DimOrder, ImageSource, Model, OcrEngine, OcrEngineParamsImpl, OcrErrorKind,
+        DEFAULT_ALPHABET,
+    };
+    use crate::errors::ModelError;
 
     /// Generate a dummy CHW input image for OCR processing.
     ///
@@ -340,7 +344,7 @@ mod tests {
     struct FakeDetectionModel {}
 
     impl Model for FakeDetectionModel {
-        fn input_shape(&self) -> anyhow::Result<Vec<Dimension>> {
+        fn input_shape(&self) -> Result<Vec<Dimension>, ModelError> {
             Ok([
                 Dimension::Symbolic("batch".to_string()),
                 Dimension::Fixed(1),
@@ -356,7 +360,7 @@ mod tests {
             &self,
             input: TensorView<f32>,
             _opts: Option<rten::RunOptions>,
-        ) -> anyhow::Result<Tensor<f32>> {
+        ) -> Result<Tensor<f32>, ModelError> {
             Ok(input.map(|v| v + 0.5))
         }
     }
@@ -373,7 +377,7 @@ mod tests {
     struct FakeRecognitionModel {}
 
     impl Model for FakeRecognitionModel {
-        fn input_shape(&self) -> anyhow::Result<Vec<Dimension>> {
+        fn input_shape(&self) -> Result<Vec<Dimension>, ModelError> {
             let output_columns = 64;
             Ok([
                 Dimension::Symbolic("batch".to_string()),
@@ -388,8 +392,10 @@ mod tests {
             &self,
             input: TensorView<f32>,
             _opts: Option<rten::RunOptions>,
-        ) -> anyhow::Result<Tensor<f32>> {
-            let nchw: NdTensorView<f32, 4> = input.try_into()?;
+        ) -> Result<Tensor<f32>, ModelError> {
+            let nchw: NdTensorView<f32, 4> = input
+                .try_into()
+                .map_err(|_| ModelError::WrongOutput("expected 4D input".into()))?;
             assert_eq!(nchw.size(1), 1);
 
             let nhw = nchw.slice((.., 0)); // Remove channel axis
@@ -458,6 +464,21 @@ mod tests {
         assert_eq!(chans, 1);
         assert_eq!(width, image.size(2));
         assert_eq!(height, image.size(1));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_ocr_engine_model_not_loaded() -> Result<(), Box<dyn Error>> {
+        let image = gen_test_image(3 /* n_words */);
+        let engine = OcrEngine::new_impl(OcrEngineParamsImpl::<FakeDetectionModel>::default())?;
+        let input = engine.prepare_input(ImageSource::from_tensor(image.view(), DimOrder::Chw)?)?;
+
+        let err = engine.detect_words(&input).err().unwrap();
+        assert_eq!(err.kind(), OcrErrorKind::DetectionModelNotLoaded);
+
+        let err = engine.recognize_text(&input, &[]).err().unwrap();
+        assert_eq!(err.kind(), OcrErrorKind::RecognitionModelNotLoaded);
 
         Ok(())
     }

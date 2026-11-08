@@ -101,7 +101,7 @@ impl OcrEngine {
             recognition_model,
             ..Default::default()
         })
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("{e:#}"))?;
         Ok(OcrEngine { engine })
     }
 
@@ -119,7 +119,7 @@ impl OcrEngine {
         self.engine
             .prepare_input(image_source)
             .map(|input| Image { input })
-            .map_err(|e| e.to_string())
+            .map_err(|e| format!("{e:#}"))
     }
 
     /// Detect text in an image.
@@ -131,7 +131,7 @@ impl OcrEngine {
         let words = self
             .engine
             .detect_words(&image.input)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("{e:#}"))?;
         Ok(self
             .engine
             .find_text_lines(&image.input, &words)
@@ -169,7 +169,7 @@ impl OcrEngine {
         let text_lines = self
             .engine
             .recognize_text(&image.input, &lines)
-            .map_err(|e| e.to_string())?
+            .map_err(|e| format!("{e:#}"))?
             .into_iter()
             .map(|line| {
                 line.map(|line| TextLine { line: Some(line) })
@@ -186,7 +186,7 @@ impl OcrEngine {
     pub fn get_text(&self, image: &Image) -> Result<String, String> {
         self.engine
             .get_text(&image.input)
-            .map_err(|e| e.to_string())
+            .map_err(|e| format!("{e:#}"))
     }
 
     /// Detect and recognize text in an image.
@@ -198,12 +198,12 @@ impl OcrEngine {
         let words = self
             .engine
             .detect_words(&image.input)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("{e:#}"))?;
         let lines = self.engine.find_text_lines(&image.input, &words);
         let text_lines = self
             .engine
             .recognize_text(&image.input, &lines)
-            .map_err(|e| e.to_string())?
+            .map_err(|e| format!("{e:#}"))?
             .into_iter()
             .map(|line| {
                 line.map(|line| TextLine { line: Some(line) })
