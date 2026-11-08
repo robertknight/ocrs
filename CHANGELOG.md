@@ -5,12 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.14.0] - 2026-11-08
 
-### Breaking changes
+- Updated to rten v0.28. This fixes bugs with the ONNX `ConvInteger` operator
+  that prevented quantized text recognition models from working
+  (https://github.com/robertknight/ocrs/pull/290)
+
+- Reduced build time by replacing `url` dependency with a minimal custom
+  parser (https://github.com/robertknight/ocrs/pull/288)
 
 - `OcrEngine` methods now return a dedicated `OcrError` type instead of
   `anyhow::Error` (https://github.com/robertknight/ocrs/issues/224).
+
+- Added a notice in the examples that users should host their own copy of
+  the models in downstream projects (https://github.com/robertknight/ocrs/pull/283)
 
 ## [0.13.1] - 2026-09-13
 
