@@ -2,11 +2,11 @@ use core::f32;
 use std::collections::HashMap;
 
 use rayon::prelude::*;
-use rten::ctc::{CtcDecoder, CtcHypothesis};
 use rten::{thread_pool, Dimension, FloatOperators};
 use rten_imageproc::{
     bounding_rect, BoundingRect, Line, Point, PointF, Polygon, Rect, RotatedRect,
 };
+use rten_sequence::ctc::{CtcDecoder, CtcHypothesis};
 use rten_tensor::prelude::*;
 use rten_tensor::{NdTensor, NdTensorView, NdTensorViewMut, Tensor};
 
