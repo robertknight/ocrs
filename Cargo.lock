@@ -574,7 +574,7 @@ dependencies = [
 
 [[package]]
 name = "ocrs"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "fastrand",
  "image",
@@ -590,7 +590,7 @@ dependencies = [
 
 [[package]]
 name = "ocrs-capi"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "cbindgen",
  "image",
@@ -601,7 +601,7 @@ dependencies = [
 
 [[package]]
 name = "ocrs-cli"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "arboard",
